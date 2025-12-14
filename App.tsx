@@ -61,10 +61,11 @@ const WheelColumn: React.FC<{
       <div className="absolute top-[calc(50%-24px)] w-full h-12 border-t border-b border-slate-600 bg-slate-800/30 pointer-events-none z-0 rounded-lg" />
 
       {/* Scroll Container - h-36 is 144px (3 items). Padding ensures center alignment. */}
+      {/* Added classes to hide scrollbars across browsers and force better snapping */}
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
-        className="w-full h-full overflow-y-scroll overflow-x-hidden snap-y snap-mandatory no-scrollbar z-10 py-[calc(50%-24px)] touch-pan-y"
+        className="w-full h-full overflow-y-scroll overflow-x-hidden snap-y snap-mandatory z-10 py-[calc(50%-24px)] touch-pan-y [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
         style={{ scrollBehavior: 'auto' }}
       >
         {Array.from({ length: range }).map((_, i) => (
@@ -77,6 +78,8 @@ const WheelColumn: React.FC<{
                  scrollRef.current.scrollTo({ top: i * ITEM_HEIGHT, behavior: 'smooth' });
               }
             }}
+            // Added scroll-snap-stop: always via style to ensure it doesn't float between items
+            style={{ scrollSnapStop: 'always' }}
             className={`h-12 flex items-center justify-center snap-center cursor-pointer transition-all duration-200 ${
               i === value ? 'text-2xl font-bold text-white scale-110' : 'text-lg text-slate-600'
             }`}
