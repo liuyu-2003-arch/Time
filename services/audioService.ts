@@ -64,6 +64,61 @@ export const playTickSound = () => {
   osc.stop(ctx.currentTime + 0.03);
 };
 
+// Background Music (Ambient Drone)
+let bgOsc: OscillatorNode | null = null;
+let bgGain: GainNode | null = null;
+
+export const setBackgroundMusicState = (enable: boolean) => {
+  const ctx = getAudioContext();
+  
+  if (enable) {
+    if (bgOsc) return; // Already playing
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+    bgOsc = ctx.createOscillator();
+    bgGain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    // Deep ambient drone
+    bgOsc.type = 'triangle'; 
+    bgOsc.frequency.value = 40; // Deep bass
+
+    filter.type = 'lowpass';
+    filter.frequency.value = 180; 
+
+    bgOsc.connect(filter);
+    filter.connect(bgGain);
+    bgGain.connect(ctx.destination);
+
+    // Fade in
+    bgGain.gain.setValueAtTime(0, ctx.currentTime);
+    bgGain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 2); 
+
+    bgOsc.start();
+  } else {
+    if (bgOsc && bgGain) {
+      const oldOsc = bgOsc;
+      const oldGain = bgGain;
+      
+      // Fade out
+      try {
+        oldGain.gain.cancelScheduledValues(ctx.currentTime);
+        oldGain.gain.setValueAtTime(oldGain.gain.value, ctx.currentTime);
+        oldGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+        
+        setTimeout(() => {
+          try {
+            oldOsc.stop();
+            oldOsc.disconnect();
+          } catch(e) {}
+        }, 600);
+      } catch (e) { console.error(e); }
+    }
+    bgOsc = null;
+    bgGain = null;
+  }
+};
+
 // Fallback Beep Generator
 const playFallbackBeep = (type: 'tick' | 'end') => {
   const ctx = getAudioContext();

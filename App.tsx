@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Volume2, Loader2, AlertCircle } from 'lucide-react';
-import { generateVoiceAsset, playSound, playGoSound, getAudioContext, playTickSound } from './services/audioService';
+import { Play, Pause, RotateCcw, Music, Loader2, AlertCircle } from 'lucide-react';
+import { generateVoiceAsset, playSound, playGoSound, getAudioContext, playTickSound, setBackgroundMusicState } from './services/audioService';
 import { CircularProgress } from './components/CircularProgress';
 import { TimerSettings, AudioAssets, AppState } from './types';
 
@@ -161,11 +161,15 @@ const PRESETS = [
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [settings, setSettings] = useState<TimerSettings>({ intervalMinutes: 2, intervalSeconds: 0 });
+  const [isMusicEnabled, setIsMusicEnabled] = useState(true);
   
   const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0);
   const [currentIntervalElapsed, setCurrentIntervalElapsed] = useState(0);
   const [cycleCount, setCycleCount] = useState(1);
   const [audioLoadingState, setAudioLoadingState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
+  
+  // Ref for Wake Lock Sentinel
+  const wakeLockRef = useRef<any>(null);
   
   const audioAssets = useRef<AudioAssets>({
     five: null, four: null, three: null, two: null, one: null, next: null
@@ -200,6 +204,58 @@ const App: React.FC = () => {
     loadAudioInBackground();
   };
 
+  // Manage Background Music
+  useEffect(() => {
+    const shouldPlay = appState === AppState.RUNNING && isMusicEnabled;
+    setBackgroundMusicState(shouldPlay);
+  }, [appState, isMusicEnabled]);
+
+  // Manage Screen Wake Lock
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      if ('wakeLock' in navigator) {
+        try {
+          const sentinel = await (navigator as any).wakeLock.request('screen');
+          wakeLockRef.current = sentinel;
+        } catch (err) {
+          console.warn("Wake Lock request failed:", err);
+        }
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      if (wakeLockRef.current) {
+        try {
+          await wakeLockRef.current.release();
+          wakeLockRef.current = null;
+        } catch (err) {
+           // Ignore errors on release
+           console.warn("Wake Lock release failed:", err);
+        }
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      // Re-acquire lock if app comes back to foreground and is running
+      if (document.visibilityState === 'visible' && appState === AppState.RUNNING) {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    if (appState === AppState.RUNNING) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      releaseWakeLock();
+    };
+  }, [appState]);
+
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
     if (appState === AppState.RUNNING) {
@@ -231,11 +287,16 @@ const App: React.FC = () => {
     setAppState(prev => prev === AppState.RUNNING ? AppState.PAUSED : AppState.RUNNING);
   };
 
+  const toggleMusic = () => {
+      setIsMusicEnabled(prev => !prev);
+  };
+
   const resetTimer = () => {
     setAppState(AppState.IDLE);
     setTotalSecondsElapsed(0);
     setCurrentIntervalElapsed(0);
     setCycleCount(1);
+    setBackgroundMusicState(false);
   };
 
   // --- Views ---
@@ -250,10 +311,9 @@ const App: React.FC = () => {
                   <span className="font-bold text-slate-300 tracking-wide uppercase text-xs">IntervalFlow</span>
               </div>
               <h1 className="text-2xl font-bold text-slate-200 tracking-tight">Set Interval</h1>
-              <p className="text-slate-500 text-sm mt-1">Choose your work/rest duration</p>
            </header>
 
-           {/* Main: Increased spacing from space-y-3 to space-y-8 to match footer gaps */}
+           {/* Main: Increased spacing from space-y-8 to match footer gaps */}
            <main className="flex-1 flex flex-col items-center justify-center space-y-8 w-full max-w-lg mx-auto px-6">
               
               {/* Wheel Picker: Increased vertical padding (pt-14 pb-6) to accommodate larger label offset */}
@@ -345,16 +405,23 @@ const App: React.FC = () => {
           <p className="text-slate-400 text-sm tracking-widest uppercase">Current Cycle</p>
           <p className="text-3xl font-bold text-white">#{cycleCount}</p>
         </div>
-        <div className="relative">
-          <CircularProgress 
-            size={300} 
-            strokeWidth={12} 
-            percentage={percentage} 
-            timeLeftStr={formatTime(timeLeftInInterval)}
-            totalTimeStr={formatTime(totalSecondsElapsed)}
-            color={timeLeftInInterval <= 5 ? '#FF0055' : '#00D8FF'}
-          />
+        
+        <div className="flex flex-col items-center">
+           <div className="relative">
+             <CircularProgress 
+               size={300} 
+               strokeWidth={12} 
+               percentage={percentage} 
+               timeLeftStr={formatTime(timeLeftInInterval)}
+               color={timeLeftInInterval <= 5 ? '#FF0055' : '#00D8FF'}
+             />
+           </div>
+           
+           <div className="mt-8 text-slate-500 font-medium tracking-widest uppercase text-sm">
+              Total: {formatTime(intervalDuration)}
+           </div>
         </div>
+
         <div className="h-8">
            {timeLeftInInterval <= 5 && timeLeftInInterval > 0 && (
              <span className="text-secondary font-bold text-2xl animate-pulse">Get Ready!</span>
@@ -365,28 +432,45 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <footer className="p-8 pb-12 bg-surface/50 backdrop-blur-md rounded-t-3xl border-t border-slate-700/50 flex items-center justify-center space-x-8 shadow-2xl">
-        <button 
-          onClick={resetTimer}
-          className="p-4 rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white transition-all active:scale-95"
-        >
-          <RotateCcw size={28} />
-        </button>
+      <footer className="px-8 pb-12 pt-8 bg-surface/50 backdrop-blur-md rounded-t-3xl border-t border-slate-700/50 grid grid-cols-3 items-center w-full shadow-2xl">
+        <div className="flex justify-start">
+            <button 
+            onClick={resetTimer}
+            className="p-4 rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white transition-all active:scale-95"
+            >
+            <RotateCcw size={28} />
+            </button>
+        </div>
 
-        <button 
-          onClick={toggleTimer}
-          className={`p-8 rounded-full shadow-lg shadow-primary/20 transition-all active:scale-95 transform hover:-translate-y-1 ${
-            appState === AppState.RUNNING 
-              ? 'bg-secondary text-white' 
-              : 'bg-primary text-dark'
-          }`}
-        >
-          {appState === AppState.RUNNING ? (
-            <Pause size={48} fill="currentColor" />
-          ) : (
-            <Play size={48} fill="currentColor" className="ml-2" />
-          )}
-        </button>
+        <div className="flex justify-center">
+            <button 
+            onClick={toggleTimer}
+            className={`p-8 rounded-full shadow-lg shadow-primary/20 transition-all active:scale-95 transform hover:-translate-y-1 ${
+                appState === AppState.RUNNING 
+                ? 'bg-secondary text-white' 
+                : 'bg-primary text-dark'
+            }`}
+            >
+            {appState === AppState.RUNNING ? (
+                <Pause size={48} fill="currentColor" />
+            ) : (
+                <Play size={48} fill="currentColor" className="ml-2" />
+            )}
+            </button>
+        </div>
+        
+        <div className="flex justify-end">
+            <button 
+                onClick={toggleMusic}
+                className={`p-4 rounded-full transition-all active:scale-95 ${
+                    isMusicEnabled
+                    ? 'bg-primary/20 text-primary hover:bg-primary/30'
+                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                }`}
+                >
+                <Music size={28} />
+            </button>
+        </div>
       </footer>
     </div>
   );

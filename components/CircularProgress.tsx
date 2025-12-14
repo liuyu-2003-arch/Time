@@ -5,7 +5,6 @@ interface CircularProgressProps {
   strokeWidth: number;
   percentage: number;
   timeLeftStr: string;
-  totalTimeStr: string;
   color?: string;
 }
 
@@ -14,7 +13,6 @@ export const CircularProgress: React.FC<CircularProgressProps> = ({
   strokeWidth, 
   percentage, 
   timeLeftStr,
-  totalTimeStr,
   color = '#00D8FF'
 }) => {
   const radius = (size - strokeWidth) / 2;
@@ -53,8 +51,7 @@ export const CircularProgress: React.FC<CircularProgressProps> = ({
         />
       </svg>
       <div className="absolute flex flex-col items-center justify-center text-white">
-        <span className="text-6xl font-mono font-bold tracking-wider">{timeLeftStr}</span>
-        <span className="text-slate-400 text-sm mt-2 font-medium">TOTAL: {totalTimeStr}</span>
+        <span className="text-7xl font-mono font-bold tracking-wider">{timeLeftStr}</span>
       </div>
     </div>
   );
