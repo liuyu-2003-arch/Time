@@ -84,10 +84,10 @@ const WheelColumn: React.FC<{
   return (
     <div 
       className="relative flex flex-col items-center select-none touch-none" 
-      style={{ height: `${CONTAINER_HEIGHT}px`, width: '9rem' }} 
+      style={{ height: `${CONTAINER_HEIGHT}px`, width: '8rem' }} 
     >
-      {/* Label - Increased gap significantly (-top-10) */}
-      <div className="absolute -top-10 text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</div>
+      {/* Label - Adjusted position */}
+      <div className="absolute -top-8 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</div>
       
       {/* Selection Highlight */}
       <div 
@@ -135,7 +135,7 @@ const WheelColumn: React.FC<{
           </div>
       </div>
       
-      {/* Gradients - lighter opacity now that interaction is click-based */}
+      {/* Gradients */}
       <div className="absolute top-0 w-full bg-gradient-to-b from-dark via-dark/60 to-transparent pointer-events-none z-20" style={{ height: `${ITEM_HEIGHT}px` }} />
       <div className="absolute bottom-0 w-full bg-gradient-to-t from-dark via-dark/60 to-transparent pointer-events-none z-20" style={{ height: `${ITEM_HEIGHT}px` }} />
     </div>
@@ -303,45 +303,45 @@ const App: React.FC = () => {
 
   if (appState === AppState.IDLE) {
      return (
-        <div className="min-h-screen bg-dark flex flex-col relative text-white">
-           {/* Header reduced padding */}
-           <header className="px-8 pt-8 pb-0 text-center flex flex-col items-center">
-              <div className="flex items-center gap-2 mb-6 opacity-80">
-                  <Logo className="w-6 h-6" />
-                  <span className="font-bold text-slate-300 tracking-wide uppercase text-xs">IntervalFlow</span>
+        <div className="h-[100dvh] w-full bg-dark flex flex-col relative text-white overflow-hidden">
+           {/* Header: reduced vertical padding */}
+           <header className="px-6 pt-6 pb-2 text-center flex flex-col items-center flex-shrink-0">
+              <div className="flex items-center gap-2 mb-2 opacity-80">
+                  <Logo className="w-5 h-5" />
+                  <span className="font-bold text-slate-300 tracking-wide uppercase text-[10px]">IntervalFlow</span>
               </div>
-              <h1 className="text-2xl font-bold text-slate-200 tracking-tight">Set Interval</h1>
+              <h1 className="text-xl font-bold text-slate-200 tracking-tight">Set Interval</h1>
            </header>
 
-           {/* Main: Increased spacing from space-y-8 to match footer gaps */}
-           <main className="flex-1 flex flex-col items-center justify-center space-y-8 w-full max-w-lg mx-auto px-6">
+           {/* Main: Use flex-col and justify-evenly to distribute space dynamically, reduced max width */}
+           <main className="flex-1 flex flex-col items-center justify-center gap-4 w-full max-w-sm mx-auto px-6">
               
-              {/* Wheel Picker: Increased vertical padding (pt-14 pb-6) to accommodate larger label offset */}
-              <div className="flex justify-center items-center space-x-2 bg-surface/50 px-4 pt-14 pb-6 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-[22rem]">
+              {/* Wheel Picker: Reduced internal padding */}
+              <div className="flex justify-center items-center space-x-2 bg-surface/50 px-2 pt-10 pb-4 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-full">
                  <WheelColumn 
                     range={61} 
                     value={settings.intervalMinutes} 
                     onChange={(val) => setSettings(s => ({...s, intervalMinutes: val}))} 
-                    label="Minutes"
+                    label="MIN"
                  />
-                 <div className="h-10 text-3xl font-bold text-slate-600 pb-2">:</div>
+                 <div className="h-10 text-2xl font-bold text-slate-600 pb-2">:</div>
                  <WheelColumn 
                     range={60} 
                     value={settings.intervalSeconds} 
                     onChange={(val) => setSettings(s => ({...s, intervalSeconds: val}))} 
-                    label="Seconds"
+                    label="SEC"
                  />
               </div>
 
-              {/* Presets: Compact spacing, aligned width */}
-              <div className="w-full flex flex-col items-center">
-                 <div className="text-xs font-bold text-slate-600 uppercase tracking-widest text-center mb-2">Quick Presets</div>
-                 <div className="grid grid-cols-2 gap-2 w-[22rem]">
+              {/* Presets: Compact spacing */}
+              <div className="w-full flex flex-col items-center gap-2">
+                 <div className="text-[10px] font-bold text-slate-600 uppercase tracking-widest text-center">Quick Presets</div>
+                 <div className="grid grid-cols-2 gap-2 w-full">
                     {PRESETS.map(p => (
                        <button
                           key={p.label}
                           onClick={() => setSettings({ intervalMinutes: p.m, intervalSeconds: p.s })}
-                          className={`py-5 rounded-xl text-base font-medium transition-all active:scale-95 ${
+                          className={`py-3 rounded-lg text-sm font-medium transition-all active:scale-95 ${
                              settings.intervalMinutes === p.m && settings.intervalSeconds === p.s
                              ? 'bg-slate-700 text-white shadow-lg'
                              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
@@ -354,18 +354,19 @@ const App: React.FC = () => {
               </div>
            </main>
 
-           <footer className="p-8 pb-8 w-full flex flex-col items-center">
-              <div className="w-[22rem]">
+           {/* Footer: reduced padding */}
+           <footer className="p-6 pb-8 w-full flex flex-col items-center flex-shrink-0">
+              <div className="w-full max-w-sm flex flex-col items-center">
                  <button 
                     onClick={startSession}
-                    className="w-full py-6 bg-primary hover:bg-cyan-400 text-dark font-bold text-2xl rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center space-x-2 transition-transform active:scale-95"
+                    className="w-64 py-4 bg-primary hover:bg-cyan-400 text-dark font-bold text-xl rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center space-x-2 transition-transform active:scale-95"
                  >
-                    <Play fill="currentColor" size={28} />
+                    <Play fill="currentColor" size={24} />
                     <span>Start Workout</span>
                  </button>
                  {audioLoadingState === 'failed' && (
-                    <p className="text-center text-xs text-yellow-500 mt-4 flex items-center justify-center gap-1">
-                       <AlertCircle size={12}/> Using beep sounds (AI Voice unavailable)
+                    <p className="text-center text-[10px] text-yellow-500 mt-2 flex items-center justify-center gap-1">
+                       <AlertCircle size={10}/> Audio fallback active
                     </p>
                  )}
               </div>
@@ -378,8 +379,8 @@ const App: React.FC = () => {
   const percentage = (timeLeftInInterval / intervalDuration) * 100;
 
   return (
-    <div className="min-h-screen bg-dark flex flex-col text-white overflow-hidden relative">
-      <header className="p-6 flex justify-between items-center z-10">
+    <div className="h-[100dvh] w-full bg-dark flex flex-col text-white overflow-hidden relative">
+      <header className="p-6 flex justify-between items-center z-10 flex-shrink-0">
         <div className="flex items-center gap-3">
             <Logo className="w-8 h-8" />
             <h1 className="text-xl font-bold text-slate-200">IntervalFlow</h1>
@@ -388,41 +389,40 @@ const App: React.FC = () => {
            {audioLoadingState === 'loading' && (
              <div className="flex items-center space-x-2 px-2 py-1 bg-surface rounded-full border border-slate-700">
                <Loader2 className="animate-spin text-primary" size={14} />
-               <span className="text-xs text-slate-400">Loading AI Voice...</span>
              </div>
            )}
            {audioLoadingState === 'failed' && (
-              <span className="text-xs text-yellow-500 font-medium px-2 py-1 bg-yellow-500/10 rounded-full border border-yellow-500/20">Beeps Mode</span>
+              <span className="text-xs text-yellow-500 font-medium px-2 py-1 bg-yellow-500/10 rounded-full border border-yellow-500/20">Beeps</span>
            )}
            {audioLoadingState === 'ready' && (
-              <span className="text-xs text-primary font-medium px-2 py-1 bg-primary/10 rounded-full border border-primary/20">Voice Active</span>
+              <span className="text-xs text-primary font-medium px-2 py-1 bg-primary/10 rounded-full border border-primary/20">Voice</span>
            )}
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center space-y-8 relative px-6">
-        <div className="text-center space-y-1">
-          <p className="text-slate-400 text-sm tracking-widest uppercase">Current Cycle</p>
+      <main className="flex-1 flex flex-col items-center justify-center relative px-6 w-full">
+        <div className="text-center space-y-1 mb-6">
+          <p className="text-slate-400 text-xs tracking-widest uppercase">Cycle</p>
           <p className="text-3xl font-bold text-white">#{cycleCount}</p>
         </div>
         
         <div className="flex flex-col items-center">
            <div className="relative">
              <CircularProgress 
-               size={300} 
-               strokeWidth={12} 
+               size={280} 
+               strokeWidth={10} 
                percentage={percentage} 
                timeLeftStr={formatTime(timeLeftInInterval)}
                color={timeLeftInInterval <= 5 ? '#FF0055' : '#00D8FF'}
              />
            </div>
            
-           <div className="mt-8 text-slate-500 font-medium tracking-widest uppercase text-sm">
-              Total: {formatTime(intervalDuration)}
+           <div className="mt-6 text-slate-500 font-medium tracking-widest uppercase text-xs">
+              Interval: {formatTime(intervalDuration)}
            </div>
         </div>
 
-        <div className="h-8">
+        <div className="h-8 mt-4 flex items-center justify-center">
            {timeLeftInInterval <= 5 && timeLeftInInterval > 0 && (
              <span className="text-secondary font-bold text-2xl animate-pulse">Get Ready!</span>
            )}
@@ -432,29 +432,29 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <footer className="px-8 pb-12 pt-8 bg-surface/50 backdrop-blur-md rounded-t-3xl border-t border-slate-700/50 grid grid-cols-3 items-center w-full shadow-2xl">
+      <footer className="px-8 pb-10 pt-6 bg-surface/50 backdrop-blur-md rounded-t-3xl border-t border-slate-700/50 grid grid-cols-3 items-center w-full shadow-2xl flex-shrink-0">
         <div className="flex justify-start">
             <button 
             onClick={resetTimer}
             className="p-4 rounded-full bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white transition-all active:scale-95"
             >
-            <RotateCcw size={28} />
+            <RotateCcw size={24} />
             </button>
         </div>
 
         <div className="flex justify-center">
             <button 
             onClick={toggleTimer}
-            className={`p-8 rounded-full shadow-lg shadow-primary/20 transition-all active:scale-95 transform hover:-translate-y-1 ${
+            className={`p-6 rounded-full shadow-lg shadow-primary/20 transition-all active:scale-95 transform hover:-translate-y-1 ${
                 appState === AppState.RUNNING 
                 ? 'bg-secondary text-white' 
                 : 'bg-primary text-dark'
             }`}
             >
             {appState === AppState.RUNNING ? (
-                <Pause size={48} fill="currentColor" />
+                <Pause size={36} fill="currentColor" />
             ) : (
-                <Play size={48} fill="currentColor" className="ml-2" />
+                <Play size={36} fill="currentColor" className="ml-1" />
             )}
             </button>
         </div>
@@ -468,7 +468,7 @@ const App: React.FC = () => {
                     : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
                 }`}
                 >
-                <Music size={28} />
+                <Music size={24} />
             </button>
         </div>
       </footer>
