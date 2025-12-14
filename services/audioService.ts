@@ -42,6 +42,28 @@ async function decodeAudioData(
   return buffer;
 }
 
+// UI Interaction Sounds
+export const playTickSound = () => {
+  const ctx = getAudioContext();
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  // Short, high-pitch "tick"
+  osc.frequency.setValueAtTime(600, ctx.currentTime);
+  osc.type = 'sine';
+  
+  gain.gain.setValueAtTime(0.05, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + 0.03);
+};
+
 // Fallback Beep Generator
 const playFallbackBeep = (type: 'tick' | 'end') => {
   const ctx = getAudioContext();

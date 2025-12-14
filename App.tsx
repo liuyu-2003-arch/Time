@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, RotateCcw, Volume2, Loader2, AlertCircle } from 'lucide-react';
-import { generateVoiceAsset, playSound, playGoSound, getAudioContext } from './services/audioService';
+import { generateVoiceAsset, playSound, playGoSound, getAudioContext, playTickSound } from './services/audioService';
 import { CircularProgress } from './components/CircularProgress';
 import { TimerSettings, AudioAssets, AppState } from './types';
 
@@ -16,10 +16,10 @@ const WheelColumn: React.FC<{
   const isProgrammaticScroll = useRef(false);
   const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   
-  // Constants for pixel-perfect alignment
-  const ITEM_HEIGHT = 48; // h-12 = 48px
+  // Constants for pixel-perfect alignment & bigger UI
+  const ITEM_HEIGHT = 64; // Increased from 48px to 64px for better touch targets
   const VISIBLE_ITEMS = 3;
-  const CONTAINER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS; // 144px
+  const CONTAINER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS; // 192px
 
   // Sync scroll position when value changes externally (e.g. Presets)
   useEffect(() => {
@@ -39,13 +39,13 @@ const WheelColumn: React.FC<{
         // Clear existing timeout
         if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
         
-        // Re-enable snap after animation finishes (approx 500ms)
+        // Re-enable snap after animation finishes
         scrollTimeout.current = setTimeout(() => {
           isProgrammaticScroll.current = false;
           if (scrollRef.current) {
             scrollRef.current.style.scrollSnapType = 'y mandatory';
           }
-        }, 550);
+        }, 600);
       }
     }
     
@@ -66,8 +66,11 @@ const WheelColumn: React.FC<{
       if (clampedIndex !== value) {
         // Haptic feedback
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
-           navigator.vibrate(10);
+           navigator.vibrate(5); // Lighter feedback
         }
+        // Audio feedback
+        playTickSound();
+        
         onChange(clampedIndex);
       }
     }
@@ -76,51 +79,51 @@ const WheelColumn: React.FC<{
   return (
     <div 
       className="relative flex flex-col items-center select-none" 
-      style={{ height: `${CONTAINER_HEIGHT}px`, width: '6rem' }} // w-24
+      style={{ height: `${CONTAINER_HEIGHT}px`, width: '9rem' }} // Wider column
     >
       {/* Label */}
-      <div className="absolute -top-6 text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</div>
+      <div className="absolute -top-5 text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</div>
       
       {/* Selection Highlight */}
-      {/* Positioned exactly at the middle slot: 48px from top */}
-      <div className="absolute top-[48px] w-full h-[48px] border-t border-b border-slate-600 bg-slate-800/30 pointer-events-none z-0 rounded-lg" />
+      <div 
+        className="absolute w-full border-t border-b border-slate-600 bg-slate-800/30 pointer-events-none z-0 rounded-lg"
+        style={{ top: `${ITEM_HEIGHT}px`, height: `${ITEM_HEIGHT}px` }} 
+      />
 
       {/* Scroll Container */}
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
-        className="w-full h-full overflow-y-scroll overflow-x-hidden snap-y snap-mandatory z-10 no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
+        className="w-full h-full overflow-y-scroll overflow-x-hidden snap-y snap-mandatory z-10 no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] touch-pan-y"
       >
-        {/* Top Spacer: Pushes Item 0 to the middle slot when scrollTop is 0 */}
+        {/* Top Spacer: Pushes Item 0 to the middle slot */}
         <div className="w-full flex-shrink-0" style={{ height: `${ITEM_HEIGHT}px` }} />
         
         {Array.from({ length: range }).map((_, i) => (
           <div 
             key={i} 
-            onClick={() => {
-              // Click to snap
-              onChange(i); 
-              // The useEffect will handle the scrolling
+            onClick={() => onChange(i)}
+            style={{ 
+              height: `${ITEM_HEIGHT}px`,
+              scrollSnapStop: 'always' // Forces stop at each item, killing inertia
             }}
-            style={{ height: `${ITEM_HEIGHT}px` }}
             className={`w-full flex flex-shrink-0 items-center justify-center snap-center cursor-pointer transition-all duration-200 tabular-nums leading-none ${
               i === value 
-                ? 'text-3xl font-bold text-white' 
-                : 'text-lg text-slate-600'
+                ? 'text-4xl font-bold text-white' 
+                : 'text-xl text-slate-600'
             }`}
           >
-            {/* Added small vertical offset to visually center numbers which often sit high */}
-            <span className="translate-y-[1px]">{i.toString().padStart(2, '0')}</span>
+            <span className="translate-y-[2px]">{i.toString().padStart(2, '0')}</span>
           </div>
         ))}
 
-        {/* Bottom Spacer: Allows last item to reach the middle slot */}
+        {/* Bottom Spacer */}
         <div className="w-full flex-shrink-0" style={{ height: `${ITEM_HEIGHT}px` }} />
       </div>
       
       {/* Gradients */}
-      <div className="absolute top-0 w-full h-12 bg-gradient-to-b from-dark via-dark/90 to-transparent pointer-events-none z-20" />
-      <div className="absolute bottom-0 w-full h-12 bg-gradient-to-t from-dark via-dark/90 to-transparent pointer-events-none z-20" />
+      <div className="absolute top-0 w-full bg-gradient-to-b from-dark via-dark/90 to-transparent pointer-events-none z-20" style={{ height: `${ITEM_HEIGHT}px` }} />
+      <div className="absolute bottom-0 w-full bg-gradient-to-t from-dark via-dark/90 to-transparent pointer-events-none z-20" style={{ height: `${ITEM_HEIGHT}px` }} />
     </div>
   );
 };
@@ -226,20 +229,24 @@ const App: React.FC = () => {
   if (appState === AppState.IDLE) {
      return (
         <div className="min-h-screen bg-dark flex flex-col relative text-white">
-           <header className="px-8 pt-12 pb-0 text-center">
+           {/* Header reduced padding */}
+           <header className="px-8 pt-8 pb-0 text-center">
               <h1 className="text-2xl font-bold text-slate-200 tracking-tight">Set Interval</h1>
               <p className="text-slate-500 text-sm mt-1">Choose your work/rest duration</p>
            </header>
 
-           <main className="flex-1 flex flex-col items-center justify-center space-y-4 w-full max-w-md mx-auto px-6">
-              <div className="flex justify-center items-center space-x-4 bg-surface/50 p-6 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-[18rem]">
+           {/* Main: Increased spacing from space-y-3 to space-y-8 to match footer gaps */}
+           <main className="flex-1 flex flex-col items-center justify-center space-y-8 w-full max-w-lg mx-auto px-6">
+              
+              {/* Wheel Picker: Increased width to 22rem and padding */}
+              <div className="flex justify-center items-center space-x-2 bg-surface/50 p-4 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-[22rem]">
                  <WheelColumn 
                     range={61} 
                     value={settings.intervalMinutes} 
                     onChange={(val) => setSettings(s => ({...s, intervalMinutes: val}))} 
                     label="Minutes"
                  />
-                 <div className="h-8 text-2xl font-bold text-slate-600 pb-2">:</div>
+                 <div className="h-10 text-3xl font-bold text-slate-600 pb-2">:</div>
                  <WheelColumn 
                     range={60} 
                     value={settings.intervalSeconds} 
@@ -248,14 +255,15 @@ const App: React.FC = () => {
                  />
               </div>
 
+              {/* Presets: Compact spacing, aligned width */}
               <div className="w-full flex flex-col items-center">
-                 <div className="text-xs font-bold text-slate-600 uppercase tracking-widest text-center mb-4">Quick Presets</div>
-                 <div className="grid grid-cols-2 gap-3 w-[18rem]">
+                 <div className="text-xs font-bold text-slate-600 uppercase tracking-widest text-center mb-2">Quick Presets</div>
+                 <div className="grid grid-cols-2 gap-2 w-[22rem]">
                     {PRESETS.map(p => (
                        <button
                           key={p.label}
                           onClick={() => setSettings({ intervalMinutes: p.m, intervalSeconds: p.s })}
-                          className={`py-4 rounded-xl text-sm font-medium transition-all active:scale-95 ${
+                          className={`py-5 rounded-xl text-base font-medium transition-all active:scale-95 ${
                              settings.intervalMinutes === p.m && settings.intervalSeconds === p.s
                              ? 'bg-slate-700 text-white shadow-lg'
                              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
@@ -268,13 +276,13 @@ const App: React.FC = () => {
               </div>
            </main>
 
-           <footer className="p-8 pb-12 w-full flex flex-col items-center">
-              <div className="w-[18rem]">
+           <footer className="p-8 pb-8 w-full flex flex-col items-center">
+              <div className="w-[22rem]">
                  <button 
                     onClick={startSession}
-                    className="w-full py-5 bg-primary hover:bg-cyan-400 text-dark font-bold text-xl rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center space-x-2 transition-transform active:scale-95"
+                    className="w-full py-6 bg-primary hover:bg-cyan-400 text-dark font-bold text-2xl rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center space-x-2 transition-transform active:scale-95"
                  >
-                    <Play fill="currentColor" size={24} />
+                    <Play fill="currentColor" size={28} />
                     <span>Start Workout</span>
                  </button>
                  {audioLoadingState === 'failed' && (
