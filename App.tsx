@@ -1,8 +1,76 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Volume2, Settings, Loader2, X, Plus, Minus } from 'lucide-react';
-import { generateVoiceAsset, playSound, getAudioContext } from './services/audioService';
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Pause, RotateCcw, Volume2, Loader2, AlertCircle } from 'lucide-react';
+import { generateVoiceAsset, playSound, playGoSound, getAudioContext } from './services/audioService';
 import { CircularProgress } from './components/CircularProgress';
 import { TimerSettings, AudioAssets, AppState } from './types';
+
+// --- Components ---
+
+const WheelColumn: React.FC<{
+  range: number;
+  value: number;
+  onChange: (val: number) => void;
+  label: string;
+}> = ({ range, value, onChange, label }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const ITEM_HEIGHT = 48; // h-12
+
+  // Sync scroll position when value changes externally
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = value * ITEM_HEIGHT;
+    }
+  }, [value]);
+
+  const handleScroll = () => {
+    if (scrollRef.current) {
+      const scrollTop = scrollRef.current.scrollTop;
+      const index = Math.round(scrollTop / ITEM_HEIGHT);
+      if (index !== value && index < range) {
+        onChange(index);
+      }
+    }
+  };
+
+  return (
+    <div className="relative h-48 w-24 flex flex-col items-center">
+      {/* Label */}
+      <div className="absolute -top-6 text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</div>
+      
+      {/* Selection Highlight */}
+      <div className="absolute top-[calc(50%-24px)] w-full h-12 border-t border-b border-slate-600 bg-slate-800/30 pointer-events-none z-0 rounded-lg" />
+
+      {/* Scroll Container */}
+      <div 
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="w-full h-full overflow-y-scroll snap-y snap-mandatory no-scrollbar z-10 py-[calc(50%-24px)]"
+        style={{ scrollBehavior: 'smooth' }}
+      >
+        {Array.from({ length: range }).map((_, i) => (
+          <div 
+            key={i} 
+            onClick={() => onChange(i)}
+            className={`h-12 flex items-center justify-center snap-center cursor-pointer transition-all duration-200 ${
+              i === value ? 'text-2xl font-bold text-white scale-110' : 'text-lg text-slate-600'
+            }`}
+          >
+            {i.toString().padStart(2, '0')}
+          </div>
+        ))}
+        {/* Padding at bottom to allow last item to scroll to center */}
+        <div className="h-[calc(50%-24px)]"></div> 
+      </div>
+      
+      {/* Gradients for depth */}
+      <div className="absolute top-0 w-full h-12 bg-gradient-to-b from-dark to-transparent pointer-events-none z-20" />
+      <div className="absolute bottom-0 w-full h-12 bg-gradient-to-t from-dark to-transparent pointer-events-none z-20" />
+    </div>
+  );
+};
+
+
+// --- Main App ---
 
 // Helper to format MM:SS
 const formatTime = (totalSeconds: number) => {
@@ -24,12 +92,13 @@ const App: React.FC = () => {
   // --- State ---
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [settings, setSettings] = useState<TimerSettings>({ intervalMinutes: 2, intervalSeconds: 0 });
-  const [showSettings, setShowSettings] = useState(false);
   
   // Timer State
   const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0);
   const [currentIntervalElapsed, setCurrentIntervalElapsed] = useState(0);
   const [cycleCount, setCycleCount] = useState(1);
+  const [audioLoaded, setAudioLoaded] = useState(false);
+  const [usingFallbackAudio, setUsingFallbackAudio] = useState(false);
   
   // Audio Assets Ref
   const audioAssets = useRef<AudioAssets>({
@@ -40,15 +109,24 @@ const App: React.FC = () => {
   const intervalDuration = (settings.intervalMinutes * 60) + settings.intervalSeconds;
   
   // --- Audio Initialization ---
-  const loadAudio = async () => {
-    if (appState === AppState.GENERATING_AUDIO) return;
+  const startSession = async () => {
+    // 1. User gesture context resume
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+
+    // 2. If audio already loaded, just run
+    if (audioLoaded) {
+      setAppState(AppState.RUNNING);
+      return;
+    }
+
+    // 3. Generate Audio
     setAppState(AppState.GENERATING_AUDIO);
     
     try {
-      // Resume context if needed
-      getAudioContext().resume();
-
-      // Parallel generation for speed
+      // Parallel generation
       const [five, four, three, two, one, next] = await Promise.all([
         generateVoiceAsset("Five"),
         generateVoiceAsset("Four"),
@@ -59,13 +137,16 @@ const App: React.FC = () => {
       ]);
 
       audioAssets.current = { five, four, three, two, one, next };
-      setAppState(AppState.READY);
+      setAudioLoaded(true);
+      setUsingFallbackAudio(false);
     } catch (err) {
-      console.error("Failed to load audio", err);
-      // Fallback to ready anyway, just won't play sound or could show error
-      setAppState(AppState.READY);
-      alert("Could not generate AI voice. Check API Key quota.");
+      console.warn("Audio generation failed, switching to fallback beeps.", err);
+      // Don't block the user, just mark as loaded (using fallback)
+      setAudioLoaded(true);
+      setUsingFallbackAudio(true);
     }
+
+    setAppState(AppState.RUNNING);
   };
 
   // --- Timer Logic ---
@@ -78,9 +159,7 @@ const App: React.FC = () => {
           const newTotal = prev + 1;
           
           // Calculate interval position logic
-          // Use modulo to find position in current cycle
           const timeInCurrentCycle = newTotal % intervalDuration;
-          // Handle the edge case where modulo is 0 (end of cycle)
           const effectiveTime = timeInCurrentCycle === 0 ? intervalDuration : timeInCurrentCycle;
 
           // Check Triggers based on "Time Remaining" in this interval
@@ -93,7 +172,7 @@ const App: React.FC = () => {
           if (timeRemaining === 2) playSound(audioAssets.current.two);
           if (timeRemaining === 1) playSound(audioAssets.current.one);
           if (timeRemaining === 0) {
-             playSound(audioAssets.current.next);
+             playGoSound(audioAssets.current.next);
              setCycleCount(c => c + 1);
           }
 
@@ -118,201 +197,114 @@ const App: React.FC = () => {
   };
 
   const resetTimer = () => {
-    setAppState(AppState.READY);
+    setAppState(AppState.IDLE); // Go back to Setup
     setTotalSecondsElapsed(0);
     setCurrentIntervalElapsed(0);
     setCycleCount(1);
   };
 
-  const updateSettings = (field: keyof TimerSettings, value: number) => {
-    // Ensure valid inputs
-    let safeValue = Math.max(0, value);
-    if (field === 'intervalSeconds') safeValue = Math.min(59, safeValue);
-    
-    setSettings(prev => ({ ...prev, [field]: safeValue }));
-    // Reset timer if settings change
-    resetTimer();
-  };
+  // --- Views ---
 
-  // --- Render ---
-  const timeLeftInInterval = intervalDuration - currentIntervalElapsed;
-  const percentage = (timeLeftInInterval / intervalDuration) * 100;
-
-  // Initial Load Screen
-  if (appState === AppState.IDLE) {
-    return (
-      <div className="min-h-screen bg-dark flex flex-col items-center justify-center p-6 text-center space-y-8">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-bold text-primary tracking-tight">IntervalFlow</h1>
-          <p className="text-slate-400">AI-Powered Workout Assistant</p>
-        </div>
-        
-        <div className="p-6 bg-surface rounded-2xl max-w-sm w-full border border-slate-700 shadow-xl">
-           <p className="text-sm text-slate-300 mb-6">
-             We use Gemini TTS to generate custom high-quality voice cues for your workout. 
-           </p>
-           <button 
-             onClick={loadAudio}
-             className="w-full py-4 bg-primary hover:bg-cyan-400 text-dark font-bold rounded-xl flex items-center justify-center space-x-2 transition-all active:scale-95"
-           >
-             <Volume2 size={24} />
-             <span>Initialize Voice & Start</span>
-           </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Loading Screen
+  // 1. Loading View
   if (appState === AppState.GENERATING_AUDIO) {
     return (
       <div className="min-h-screen bg-dark flex flex-col items-center justify-center p-6 text-center space-y-6">
         <Loader2 className="animate-spin text-primary" size={48} />
-        <p className="text-white text-lg animate-pulse">Generating voice assets with Gemini...</p>
+        <p className="text-white text-lg font-medium animate-pulse">Preparing your coach...</p>
+        <p className="text-slate-500 text-sm">Generating AI voice assets</p>
       </div>
     );
   }
 
-  // Main App Interface
+  // 2. Setup View (IDLE)
+  if (appState === AppState.IDLE) {
+     return (
+        <div className="min-h-screen bg-dark flex flex-col relative text-white">
+           <header className="p-8 pt-12 text-center">
+              <h1 className="text-2xl font-bold text-slate-200 tracking-tight">Set Interval</h1>
+              <p className="text-slate-500 text-sm mt-1">Choose your work/rest duration</p>
+           </header>
+
+           <main className="flex-1 flex flex-col items-center justify-center space-y-10 w-full max-w-md mx-auto px-6">
+              
+              {/* Wheel Picker */}
+              <div className="flex justify-center items-center space-x-4 bg-surface/50 p-6 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm">
+                 <WheelColumn 
+                    range={61} 
+                    value={settings.intervalMinutes} 
+                    onChange={(val) => setSettings(s => ({...s, intervalMinutes: val}))} 
+                    label="Minutes"
+                 />
+                 <div className="h-8 text-2xl font-bold text-slate-600 pb-2">:</div>
+                 <WheelColumn 
+                    range={60} 
+                    value={settings.intervalSeconds} 
+                    onChange={(val) => setSettings(s => ({...s, intervalSeconds: val}))} 
+                    label="Seconds"
+                 />
+              </div>
+
+              {/* Presets */}
+              <div className="w-full">
+                 <div className="text-xs font-bold text-slate-600 uppercase tracking-widest text-center mb-4">Quick Presets</div>
+                 <div className="grid grid-cols-3 gap-3">
+                    {PRESETS.map(p => (
+                       <button
+                          key={p.label}
+                          onClick={() => setSettings({ intervalMinutes: p.m, intervalSeconds: p.s })}
+                          className={`py-3 rounded-xl text-sm font-medium transition-all active:scale-95 ${
+                             settings.intervalMinutes === p.m && settings.intervalSeconds === p.s
+                             ? 'bg-slate-700 text-white shadow-lg'
+                             : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
+                          }`}
+                       >
+                          {p.label}
+                       </button>
+                    ))}
+                 </div>
+              </div>
+           </main>
+
+           <footer className="p-8 pb-12 w-full max-w-md mx-auto">
+              <button 
+                 onClick={startSession}
+                 className="w-full py-5 bg-primary hover:bg-cyan-400 text-dark font-bold text-xl rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center space-x-2 transition-transform active:scale-95"
+              >
+                 <Play fill="currentColor" size={24} />
+                 <span>Start Workout</span>
+              </button>
+              {usingFallbackAudio && (
+                 <p className="text-center text-xs text-yellow-500 mt-4 flex items-center justify-center gap-1">
+                    <AlertCircle size={12}/> Using beep sounds (AI Voice unavailable)
+                 </p>
+              )}
+           </footer>
+        </div>
+     )
+  }
+
+  // 3. Running/Paused View
+  const timeLeftInInterval = intervalDuration - currentIntervalElapsed;
+  const percentage = (timeLeftInInterval / intervalDuration) * 100;
+
   return (
     <div className="min-h-screen bg-dark flex flex-col text-white overflow-hidden relative">
       
       {/* Header */}
       <header className="p-6 flex justify-between items-center z-10">
         <h1 className="text-xl font-bold text-slate-200">IntervalFlow</h1>
-        <button 
-          onClick={() => {
-            if(appState !== AppState.RUNNING) setShowSettings(!showSettings);
-          }}
-          disabled={appState === AppState.RUNNING}
-          className={`p-2 rounded-full transition-colors ${appState === AppState.RUNNING ? 'text-slate-600 cursor-not-allowed' : 'text-primary hover:bg-surface'}`}
-        >
-          {showSettings ? <X size={24} /> : <Settings size={24} />}
-        </button>
+        <div className="flex items-center space-x-2">
+           {usingFallbackAudio ? (
+              <span className="text-xs text-yellow-500 font-medium px-2 py-1 bg-yellow-500/10 rounded-full border border-yellow-500/20">Beeps Mode</span>
+           ) : (
+              <span className="text-xs text-primary font-medium px-2 py-1 bg-primary/10 rounded-full border border-primary/20">AI Voice Active</span>
+           )}
+        </div>
       </header>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col items-center justify-center space-y-8 relative px-6">
         
-        {/* Settings Overlay */}
-        {showSettings && (
-           <div className="absolute inset-0 bg-dark/95 backdrop-blur-md z-20 flex flex-col items-center justify-center p-4 animate-in fade-in zoom-in duration-200 overflow-y-auto">
-             
-             <div className="bg-surface p-6 rounded-3xl w-full max-w-md border border-slate-700 shadow-2xl space-y-8">
-                <div className="flex justify-between items-center border-b border-slate-700 pb-4">
-                    <h2 className="text-xl font-bold text-white">Timer Setup</h2>
-                </div>
-
-                {/* Presets */}
-                <div className="space-y-3">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Quick Presets</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {PRESETS.map(p => (
-                        <button
-                            key={p.label}
-                            onClick={() => {
-                                setSettings({ intervalMinutes: p.m, intervalSeconds: p.s });
-                                resetTimer();
-                            }}
-                            className={`py-2 px-1 rounded-lg font-medium text-xs transition-all active:scale-95 ${
-                                settings.intervalMinutes === p.m && settings.intervalSeconds === p.s
-                                ? 'bg-primary text-dark font-bold'
-                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                            }`}
-                        >
-                            {p.label}
-                        </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Main Controls */}
-                <div className="space-y-4">
-                  
-                  {/* Minutes Card */}
-                  <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 space-y-4">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block text-center">Minutes</span>
-                      
-                      <div className="flex items-center justify-between">
-                         <button 
-                           onClick={() => updateSettings('intervalMinutes', settings.intervalMinutes - 1)}
-                           className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-700 text-white hover:bg-slate-600 active:scale-95"
-                         >
-                            <Minus size={20} />
-                         </button>
-                         
-                         <span className="text-5xl font-mono font-bold text-primary w-24 text-center">
-                            {settings.intervalMinutes.toString().padStart(2, '0')}
-                         </span>
-                         
-                         <button 
-                           onClick={() => updateSettings('intervalMinutes', settings.intervalMinutes + 1)}
-                           className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-700 text-white hover:bg-slate-600 active:scale-95"
-                         >
-                            <Plus size={20} />
-                         </button>
-                      </div>
-
-                      <input
-                          type="range"
-                          min="0"
-                          max="60"
-                          step="1"
-                          value={settings.intervalMinutes}
-                          onChange={(e) => updateSettings('intervalMinutes', parseInt(e.target.value))}
-                          className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                          style={{accentColor: '#00D8FF'}}
-                      />
-                  </div>
-
-                  {/* Seconds Card */}
-                  <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 space-y-4">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block text-center">Seconds</span>
-                      
-                      <div className="flex items-center justify-between">
-                         <button 
-                           onClick={() => updateSettings('intervalSeconds', settings.intervalSeconds - 1)}
-                           className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-700 text-white hover:bg-slate-600 active:scale-95"
-                         >
-                            <Minus size={20} />
-                         </button>
-                         
-                         <span className="text-5xl font-mono font-bold text-secondary w-24 text-center">
-                            {settings.intervalSeconds.toString().padStart(2, '0')}
-                         </span>
-                         
-                         <button 
-                           onClick={() => updateSettings('intervalSeconds', settings.intervalSeconds + 1)}
-                           className="w-12 h-12 flex items-center justify-center rounded-full bg-slate-700 text-white hover:bg-slate-600 active:scale-95"
-                         >
-                            <Plus size={20} />
-                         </button>
-                      </div>
-
-                      <input
-                          type="range"
-                          min="0"
-                          max="59"
-                          step="1"
-                          value={settings.intervalSeconds}
-                          onChange={(e) => updateSettings('intervalSeconds', parseInt(e.target.value))}
-                          className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                          style={{accentColor: '#FF0055'}}
-                      />
-                  </div>
-
-                </div>
-
-                <button 
-                  onClick={() => setShowSettings(false)}
-                  className="w-full py-4 bg-slate-200 text-dark font-bold text-lg rounded-xl shadow-lg transition-transform active:scale-95"
-                >
-                  Done
-                </button>
-             </div>
-           </div>
-        )}
-
         {/* Cycle Info */}
         <div className="text-center space-y-1">
           <p className="text-slate-400 text-sm tracking-widest uppercase">Current Cycle</p>
@@ -321,7 +313,6 @@ const App: React.FC = () => {
 
         {/* Big Timer */}
         <div className="relative">
-          {/* We animate the color based on urgency */}
           <CircularProgress 
             size={300} 
             strokeWidth={12} 

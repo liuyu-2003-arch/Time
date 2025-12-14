@@ -42,8 +42,43 @@ async function decodeAudioData(
   return buffer;
 }
 
+// Fallback Beep Generator
+const playFallbackBeep = (type: 'tick' | 'end') => {
+  const ctx = getAudioContext();
+  if (ctx.state === 'suspended') ctx.resume();
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  if (type === 'tick') {
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.1);
+  } else {
+    // End/Go sound
+    osc.frequency.setValueAtTime(1200, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.3);
+    osc.type = 'square';
+    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  }
+};
+
 // Gemini Service
 export const generateVoiceAsset = async (text: string): Promise<AudioBuffer> => {
+  // Check if API KEY is available, if not, throw immediately to trigger fallback
+  if (!process.env.API_KEY) {
+    throw new Error("No API Key found");
+  }
+
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
@@ -76,20 +111,43 @@ export const generateVoiceAsset = async (text: string): Promise<AudioBuffer> => 
     
     return audioBuffer;
   } catch (error) {
-    console.error("Error generating voice asset:", error);
+    console.warn("Error generating voice asset, will use fallback:", error);
     throw error;
   }
 };
 
 export const playSound = (buffer: AudioBuffer | null) => {
-  if (!buffer) return;
   const ctx = getAudioContext();
+  
+  // Ensure context is running (user gesture usually required previously)
   if (ctx.state === 'suspended') {
-    ctx.resume();
+    ctx.resume().catch(e => console.error("Audio context resume failed", e));
   }
   
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(ctx.destination);
-  source.start(0);
+  if (buffer) {
+    // Play AI Voice
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+  } else {
+    // Play Fallback Beep
+    // Determine type roughly by context (not perfect but works for general feedback)
+    playFallbackBeep('tick');
+  }
 };
+
+// Specific fallback trigger for "GO" if buffer is missing
+export const playGoSound = (buffer: AudioBuffer | null) => {
+   const ctx = getAudioContext();
+   if (ctx.state === 'suspended') ctx.resume();
+
+   if (buffer) {
+     const source = ctx.createBufferSource();
+     source.buffer = buffer;
+     source.connect(ctx.destination);
+     source.start(0);
+   } else {
+     playFallbackBeep('end');
+   }
+}
