@@ -6,6 +6,15 @@ import { TimerSettings, AudioAssets, AppState } from './types';
 
 // --- Components ---
 
+const Logo: React.FC<{ className?: string }> = ({ className = "w-8 h-8" }) => (
+  <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <circle cx="16" cy="16" r="14" stroke="#334155" strokeWidth="4" />
+    <path d="M16 2C8.26801 2 2 8.26801 2 16" stroke="#00D8FF" strokeWidth="4" strokeLinecap="round" />
+    <path d="M16 16L21 21" stroke="#FF0055" strokeWidth="3" strokeLinecap="round" />
+    <circle cx="16" cy="16" r="3" fill="white" />
+  </svg>
+);
+
 const WheelColumn: React.FC<{
   range: number;
   value: number;
@@ -235,7 +244,11 @@ const App: React.FC = () => {
      return (
         <div className="min-h-screen bg-dark flex flex-col relative text-white">
            {/* Header reduced padding */}
-           <header className="px-8 pt-8 pb-0 text-center">
+           <header className="px-8 pt-8 pb-0 text-center flex flex-col items-center">
+              <div className="flex items-center gap-2 mb-6 opacity-80">
+                  <Logo className="w-6 h-6" />
+                  <span className="font-bold text-slate-300 tracking-wide uppercase text-xs">IntervalFlow</span>
+              </div>
               <h1 className="text-2xl font-bold text-slate-200 tracking-tight">Set Interval</h1>
               <p className="text-slate-500 text-sm mt-1">Choose your work/rest duration</p>
            </header>
@@ -307,7 +320,10 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-dark flex flex-col text-white overflow-hidden relative">
       <header className="p-6 flex justify-between items-center z-10">
-        <h1 className="text-xl font-bold text-slate-200">IntervalFlow</h1>
+        <div className="flex items-center gap-3">
+            <Logo className="w-8 h-8" />
+            <h1 className="text-xl font-bold text-slate-200">IntervalFlow</h1>
+        </div>
         <div className="flex items-center space-x-2">
            {audioLoadingState === 'loading' && (
              <div className="flex items-center space-x-2 px-2 py-1 bg-surface rounded-full border border-slate-700">
