@@ -238,8 +238,8 @@ const App: React.FC = () => {
            {/* Main: Increased spacing from space-y-3 to space-y-8 to match footer gaps */}
            <main className="flex-1 flex flex-col items-center justify-center space-y-8 w-full max-w-lg mx-auto px-6">
               
-              {/* Wheel Picker: Increased width to 22rem and padding */}
-              <div className="flex justify-center items-center space-x-2 bg-surface/50 p-4 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-[22rem]">
+              {/* Wheel Picker: Increased vertical padding (pt-10 pb-6) to fix label overlap */}
+              <div className="flex justify-center items-center space-x-2 bg-surface/50 px-4 pt-10 pb-6 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-[22rem]">
                  <WheelColumn 
                     range={61} 
                     value={settings.intervalMinutes} 
