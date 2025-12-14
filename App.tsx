@@ -19,19 +19,26 @@ const WheelColumn: React.FC<{
   // Sync scroll position when value changes externally (e.g. Presets)
   useEffect(() => {
     if (scrollRef.current) {
-      // Set flag to ignore the scroll event triggered by this assignment
-      isProgrammaticScroll.current = true;
-      scrollRef.current.scrollTop = value * ITEM_HEIGHT;
+      const targetTop = value * ITEM_HEIGHT;
+      const currentTop = scrollRef.current.scrollTop;
       
-      // Reset flag after a short delay to allow scroll event to fire/settle
-      setTimeout(() => {
-        isProgrammaticScroll.current = false;
-      }, 100);
+      // Only force scroll if the difference is significant (e.g. clicking a Preset).
+      // If the difference is small (< 1 item), it's likely manual scrolling/momentum/snapping,
+      // so we avoid interfering to keep it smooth.
+      if (Math.abs(currentTop - targetTop) > 30) {
+        isProgrammaticScroll.current = true;
+        scrollRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
+        
+        // Reset flag after animation duration approximation
+        setTimeout(() => {
+          isProgrammaticScroll.current = false;
+        }, 300);
+      }
     }
   }, [value]);
 
   const handleScroll = () => {
-    // Ignore scroll events caused by clicking a preset
+    // Ignore scroll events caused by our own programmatic scrolling
     if (isProgrammaticScroll.current) return;
 
     if (scrollRef.current) {
@@ -44,7 +51,7 @@ const WheelColumn: React.FC<{
   };
 
   return (
-    <div className="relative h-48 w-24 flex flex-col items-center">
+    <div className="relative h-48 w-24 flex flex-col items-center select-none">
       {/* Label */}
       <div className="absolute -top-6 text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</div>
       
@@ -55,9 +62,8 @@ const WheelColumn: React.FC<{
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
-        className="w-full h-full overflow-y-scroll snap-y snap-mandatory no-scrollbar z-10 py-[calc(50%-24px)]"
-        // Removed scrollBehavior: 'smooth' to fix preset conflict. 
-        // Native touch scrolling remains smooth.
+        className="w-full h-full overflow-y-scroll overflow-x-hidden snap-y snap-mandatory no-scrollbar z-10 py-[calc(50%-24px)] touch-pan-y"
+        style={{ scrollBehavior: 'auto' }} // Handle smooth scrolling manually via scrollTo for presets
       >
         {Array.from({ length: range }).map((_, i) => (
           <div 
@@ -65,6 +71,7 @@ const WheelColumn: React.FC<{
             // Allow clicking a number to snap to it
             onClick={() => {
               onChange(i);
+              // Immediate feedback for tap
               if (scrollRef.current) {
                  scrollRef.current.scrollTo({ top: i * ITEM_HEIGHT, behavior: 'smooth' });
               }
@@ -102,8 +109,6 @@ const PRESETS = [
   { label: '2 min', m: 2, s: 0 },
   { label: '5 min', m: 5, s: 0 },
   { label: '10 min', m: 10, s: 0 },
-  { label: '30 min', m: 30, s: 0 },
-  { label: '1 hr', m: 60, s: 0 },
 ];
 
 const App: React.FC = () => {
@@ -254,12 +259,12 @@ const App: React.FC = () => {
               {/* Presets */}
               <div className="w-full">
                  <div className="text-xs font-bold text-slate-600 uppercase tracking-widest text-center mb-4">Quick Presets</div>
-                 <div className="grid grid-cols-3 gap-3">
+                 <div className="grid grid-cols-2 gap-3 max-w-xs mx-auto">
                     {PRESETS.map(p => (
                        <button
                           key={p.label}
                           onClick={() => setSettings({ intervalMinutes: p.m, intervalSeconds: p.s })}
-                          className={`py-3 rounded-xl text-sm font-medium transition-all active:scale-95 ${
+                          className={`py-4 rounded-xl text-sm font-medium transition-all active:scale-95 ${
                              settings.intervalMinutes === p.m && settings.intervalSeconds === p.s
                              ? 'bg-slate-700 text-white shadow-lg'
                              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
