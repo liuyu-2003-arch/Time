@@ -1,0 +1,5 @@
+{
+  "name": "IntervalFlow",
+  "description": "A high-performance interval training timer featuring AI-generated voice cues powered by Gemini. Customizable countdowns and cycle tracking for the perfect workout.",
+  "requestFramePermissions": []
+}
