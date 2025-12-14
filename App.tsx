@@ -22,32 +22,36 @@ const WheelColumn: React.FC<{
       const targetTop = value * ITEM_HEIGHT;
       const currentTop = scrollRef.current.scrollTop;
       
-      // Only force scroll if the difference is significant (e.g. clicking a Preset).
-      if (Math.abs(currentTop - targetTop) > 30) {
+      // Only force scroll if the difference is significant
+      if (Math.abs(currentTop - targetTop) > 2) {
         isProgrammaticScroll.current = true;
         scrollRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
         
-        // Reset flag after animation duration approximation
-        setTimeout(() => {
+        // Reset flag after animation duration
+        const timeout = setTimeout(() => {
           isProgrammaticScroll.current = false;
-        }, 300);
+        }, 500);
+        return () => clearTimeout(timeout);
       }
     }
   }, [value]);
 
   const handleScroll = () => {
-    // Ignore scroll events caused by our own programmatic scrolling
     if (isProgrammaticScroll.current) return;
 
     if (scrollRef.current) {
       const scrollTop = scrollRef.current.scrollTop;
       const index = Math.round(scrollTop / ITEM_HEIGHT);
-      if (index !== value && index < range) {
+      
+      // Clamp index within bounds
+      const clampedIndex = Math.max(0, Math.min(index, range - 1));
+
+      if (clampedIndex !== value) {
         // Haptic feedback
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
            navigator.vibrate(15);
         }
-        onChange(index);
+        onChange(clampedIndex);
       }
     }
   };
@@ -57,43 +61,45 @@ const WheelColumn: React.FC<{
       {/* Label */}
       <div className="absolute -top-6 text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</div>
       
-      {/* Selection Highlight */}
-      <div className="absolute top-[calc(50%-24px)] w-full h-12 border-t border-b border-slate-600 bg-slate-800/30 pointer-events-none z-0 rounded-lg" />
+      {/* Selection Highlight (Centered visually at 48px from top of container) */}
+      <div className="absolute top-[48px] w-full h-12 border-t border-b border-slate-600 bg-slate-800/30 pointer-events-none z-0 rounded-lg" />
 
-      {/* Scroll Container - h-36 is 144px (3 items). Padding ensures center alignment. */}
-      {/* Added classes to hide scrollbars across browsers and force better snapping */}
+      {/* Scroll Container */}
+      {/* Using explicit spacers instead of padding ensures reliable snap alignment for 00 and end items */}
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
-        className="w-full h-full overflow-y-scroll overflow-x-hidden snap-y snap-mandatory z-10 py-[calc(50%-24px)] touch-pan-y [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
-        style={{ scrollBehavior: 'auto' }}
+        className="w-full h-full overflow-y-scroll overflow-x-hidden snap-y snap-mandatory z-10 no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
       >
+        {/* Top Spacer: Pushes the first item (00) to the center */}
+        <div className="h-[48px] w-full flex-shrink-0" />
+        
         {Array.from({ length: range }).map((_, i) => (
           <div 
             key={i} 
-            // Allow clicking a number to snap to it
             onClick={() => {
               onChange(i);
               if (scrollRef.current) {
+                 isProgrammaticScroll.current = true;
                  scrollRef.current.scrollTo({ top: i * ITEM_HEIGHT, behavior: 'smooth' });
+                 setTimeout(() => isProgrammaticScroll.current = false, 500);
               }
             }}
-            // Added scroll-snap-stop: always via style to ensure it doesn't float between items
-            style={{ scrollSnapStop: 'always' }}
-            className={`h-12 flex items-center justify-center snap-center cursor-pointer transition-all duration-200 ${
+            className={`h-12 flex flex-shrink-0 items-center justify-center snap-center cursor-pointer transition-all duration-200 ${
               i === value ? 'text-2xl font-bold text-white scale-110' : 'text-lg text-slate-600'
             }`}
           >
             {i.toString().padStart(2, '0')}
           </div>
         ))}
-        {/* Padding at bottom to allow last item to scroll to center */}
-        <div className="h-[calc(50%-24px)]"></div> 
+
+        {/* Bottom Spacer: Allows the last item to be scrolled to center */}
+        <div className="h-[48px] w-full flex-shrink-0" />
       </div>
       
       {/* Gradients for depth */}
-      <div className="absolute top-0 w-full h-12 bg-gradient-to-b from-dark to-transparent pointer-events-none z-20" />
-      <div className="absolute bottom-0 w-full h-12 bg-gradient-to-t from-dark to-transparent pointer-events-none z-20" />
+      <div className="absolute top-0 w-full h-12 bg-gradient-to-b from-dark via-dark/80 to-transparent pointer-events-none z-20" />
+      <div className="absolute bottom-0 w-full h-12 bg-gradient-to-t from-dark via-dark/80 to-transparent pointer-events-none z-20" />
     </div>
   );
 };
@@ -236,15 +242,15 @@ const App: React.FC = () => {
   if (appState === AppState.IDLE) {
      return (
         <div className="min-h-screen bg-dark flex flex-col relative text-white">
-           <header className="p-8 pt-12 text-center">
+           <header className="px-8 pt-12 pb-0 text-center">
               <h1 className="text-2xl font-bold text-slate-200 tracking-tight">Set Interval</h1>
               <p className="text-slate-500 text-sm mt-1">Choose your work/rest duration</p>
            </header>
 
-           <main className="flex-1 flex flex-col items-center justify-center space-y-10 w-full max-w-md mx-auto px-6">
+           <main className="flex-1 flex flex-col items-center justify-center space-y-4 w-full max-w-md mx-auto px-6">
               
               {/* Wheel Picker */}
-              <div className="flex justify-center items-center space-x-4 bg-surface/50 p-6 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm">
+              <div className="flex justify-center items-center space-x-4 bg-surface/50 p-6 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-[18rem]">
                  <WheelColumn 
                     range={61} 
                     value={settings.intervalMinutes} 
@@ -261,9 +267,9 @@ const App: React.FC = () => {
               </div>
 
               {/* Presets */}
-              <div className="w-full">
+              <div className="w-full flex flex-col items-center">
                  <div className="text-xs font-bold text-slate-600 uppercase tracking-widest text-center mb-4">Quick Presets</div>
-                 <div className="grid grid-cols-2 gap-3 max-w-xs mx-auto">
+                 <div className="grid grid-cols-2 gap-3 w-[18rem]">
                     {PRESETS.map(p => (
                        <button
                           key={p.label}
@@ -281,19 +287,21 @@ const App: React.FC = () => {
               </div>
            </main>
 
-           <footer className="p-8 pb-12 w-full max-w-xs mx-auto">
-              <button 
-                 onClick={startSession}
-                 className="w-full py-5 bg-primary hover:bg-cyan-400 text-dark font-bold text-xl rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center space-x-2 transition-transform active:scale-95"
-              >
-                 <Play fill="currentColor" size={24} />
-                 <span>Start Workout</span>
-              </button>
-              {audioLoadingState === 'failed' && (
-                 <p className="text-center text-xs text-yellow-500 mt-4 flex items-center justify-center gap-1">
-                    <AlertCircle size={12}/> Using beep sounds (AI Voice unavailable)
-                 </p>
-              )}
+           <footer className="p-8 pb-12 w-full flex flex-col items-center">
+              <div className="w-[18rem]">
+                 <button 
+                    onClick={startSession}
+                    className="w-full py-5 bg-primary hover:bg-cyan-400 text-dark font-bold text-xl rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center space-x-2 transition-transform active:scale-95"
+                 >
+                    <Play fill="currentColor" size={24} />
+                    <span>Start Workout</span>
+                 </button>
+                 {audioLoadingState === 'failed' && (
+                    <p className="text-center text-xs text-yellow-500 mt-4 flex items-center justify-center gap-1">
+                       <AlertCircle size={12}/> Using beep sounds (AI Voice unavailable)
+                    </p>
+                 )}
+              </div>
            </footer>
         </div>
      )
