@@ -67,6 +67,7 @@ export const playTickSound = () => {
 // Background Music
 let bgMusic: HTMLAudioElement | null = null;
 const BG_MUSIC_URL = 'https://cloud.324893.xyz/Music/Time.mp3';
+const APP_ICON_URI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%230f172a'/%3E%3Cg transform='matrix(0.75 0 0 0.75 64 64)'%3E%3Ccircle cx='256' cy='256' r='224' stroke='%231e293b' stroke-width='64' fill='none'/%3E%3Cpath d='M256 64 A 192 192 0 0 1 448 256' stroke='%2300D8FF' stroke-width='64' stroke-linecap='round' fill='none'/%3E%3Cline x1='256' y1='256' x2='352' y2='352' stroke='%23FF0055' stroke-width='48' stroke-linecap='round'/%3E%3Ccircle cx='256' cy='256' r='32' fill='white'/%3E%3C/g%3E%3C/svg%3E";
 
 export const setBackgroundMusicState = (enable: boolean) => {
   const ctx = getAudioContext();
@@ -81,9 +82,26 @@ export const setBackgroundMusicState = (enable: boolean) => {
   }
 
   if (enable) {
-    bgMusic.play().catch(e => console.warn("Background music play failed:", e));
+    bgMusic.play()
+      .then(() => {
+        // Setup MediaSession for Dynamic Island / Lock Screen controls
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: 'IntervalFlow',
+                artist: 'Workout Timer',
+                artwork: [
+                    { src: APP_ICON_URI, sizes: '512x512', type: 'image/svg+xml' }
+                ]
+            });
+            navigator.mediaSession.playbackState = 'playing';
+        }
+      })
+      .catch(e => console.warn("Background music play failed:", e));
   } else {
     bgMusic.pause();
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'paused';
+    }
   }
 };
 
