@@ -23,8 +23,6 @@ const WheelColumn: React.FC<{
       const currentTop = scrollRef.current.scrollTop;
       
       // Only force scroll if the difference is significant (e.g. clicking a Preset).
-      // If the difference is small (< 1 item), it's likely manual scrolling/momentum/snapping,
-      // so we avoid interfering to keep it smooth.
       if (Math.abs(currentTop - targetTop) > 30) {
         isProgrammaticScroll.current = true;
         scrollRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
@@ -45,25 +43,29 @@ const WheelColumn: React.FC<{
       const scrollTop = scrollRef.current.scrollTop;
       const index = Math.round(scrollTop / ITEM_HEIGHT);
       if (index !== value && index < range) {
+        // Haptic feedback
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+           navigator.vibrate(15);
+        }
         onChange(index);
       }
     }
   };
 
   return (
-    <div className="relative h-48 w-24 flex flex-col items-center select-none">
+    <div className="relative h-36 w-24 flex flex-col items-center select-none">
       {/* Label */}
       <div className="absolute -top-6 text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</div>
       
       {/* Selection Highlight */}
       <div className="absolute top-[calc(50%-24px)] w-full h-12 border-t border-b border-slate-600 bg-slate-800/30 pointer-events-none z-0 rounded-lg" />
 
-      {/* Scroll Container */}
+      {/* Scroll Container - h-36 is 144px (3 items). Padding ensures center alignment. */}
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
         className="w-full h-full overflow-y-scroll overflow-x-hidden snap-y snap-mandatory no-scrollbar z-10 py-[calc(50%-24px)] touch-pan-y"
-        style={{ scrollBehavior: 'auto' }} // Handle smooth scrolling manually via scrollTo for presets
+        style={{ scrollBehavior: 'auto' }}
       >
         {Array.from({ length: range }).map((_, i) => (
           <div 
@@ -71,7 +73,6 @@ const WheelColumn: React.FC<{
             // Allow clicking a number to snap to it
             onClick={() => {
               onChange(i);
-              // Immediate feedback for tap
               if (scrollRef.current) {
                  scrollRef.current.scrollTo({ top: i * ITEM_HEIGHT, behavior: 'smooth' });
               }
@@ -277,7 +278,7 @@ const App: React.FC = () => {
               </div>
            </main>
 
-           <footer className="p-8 pb-12 w-full max-w-md mx-auto">
+           <footer className="p-8 pb-12 w-full max-w-xs mx-auto">
               <button 
                  onClick={startSession}
                  className="w-full py-5 bg-primary hover:bg-cyan-400 text-dark font-bold text-xl rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center space-x-2 transition-transform active:scale-95"
