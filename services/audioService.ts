@@ -54,68 +54,36 @@ export const playTickSound = () => {
   gain.connect(ctx.destination);
 
   // Short, high-pitch "tick"
-  osc.frequency.setValueAtTime(600, ctx.currentTime);
+  osc.frequency.setValueAtTime(800, ctx.currentTime);
   osc.type = 'sine';
   
   gain.gain.setValueAtTime(0.05, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
 
   osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + 0.03);
+  osc.stop(ctx.currentTime + 0.05);
 };
 
-// Background Music (Ambient Drone)
-let bgOsc: OscillatorNode | null = null;
-let bgGain: GainNode | null = null;
+// Background Music
+let bgMusic: HTMLAudioElement | null = null;
+const BG_MUSIC_URL = 'https://cloud.324893.xyz/Music/Time.mp3';
 
 export const setBackgroundMusicState = (enable: boolean) => {
   const ctx = getAudioContext();
   
+  // Ensure context is running (helps with autoplay policies)
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+  if (!bgMusic) {
+    bgMusic = new Audio(BG_MUSIC_URL);
+    bgMusic.loop = true;
+    bgMusic.volume = 0.3; // Set volume to 30% so it doesn't overpower voice cues
+  }
+
   if (enable) {
-    if (bgOsc) return; // Already playing
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-
-    bgOsc = ctx.createOscillator();
-    bgGain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-
-    // Deep ambient drone
-    bgOsc.type = 'triangle'; 
-    bgOsc.frequency.value = 40; // Deep bass
-
-    filter.type = 'lowpass';
-    filter.frequency.value = 180; 
-
-    bgOsc.connect(filter);
-    filter.connect(bgGain);
-    bgGain.connect(ctx.destination);
-
-    // Fade in
-    bgGain.gain.setValueAtTime(0, ctx.currentTime);
-    bgGain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 2); 
-
-    bgOsc.start();
+    bgMusic.play().catch(e => console.warn("Background music play failed:", e));
   } else {
-    if (bgOsc && bgGain) {
-      const oldOsc = bgOsc;
-      const oldGain = bgGain;
-      
-      // Fade out
-      try {
-        oldGain.gain.cancelScheduledValues(ctx.currentTime);
-        oldGain.gain.setValueAtTime(oldGain.gain.value, ctx.currentTime);
-        oldGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
-        
-        setTimeout(() => {
-          try {
-            oldOsc.stop();
-            oldOsc.disconnect();
-          } catch(e) {}
-        }, 600);
-      } catch (e) { console.error(e); }
-    }
-    bgOsc = null;
-    bgGain = null;
+    bgMusic.pause();
   }
 };
 
