@@ -12,77 +12,73 @@ const WheelColumn: React.FC<{
   onChange: (val: number) => void;
   label: string;
 }> = ({ range, value, onChange, label }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const isProgrammaticScroll = useRef(false);
-  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
-  // Constants for pixel-perfect alignment & bigger UI
-  const ITEM_HEIGHT = 64; // Increased from 48px to 64px for better touch targets
+  const [direction, setDirection] = useState<0 | 1 | -1>(0);
+  const valueRef = useRef(value);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Keep ref in sync with prop for the interval closure
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => stopInteraction();
+  }, []);
+
+  const handleChange = (dir: 1 | -1) => {
+    const next = valueRef.current + dir;
+    if (next >= 0 && next < range) {
+        onChange(next);
+        playTickSound();
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+           navigator.vibrate(5); 
+        }
+        return true;
+    }
+    return false;
+  };
+
+  const startInteraction = (dir: 1 | -1) => {
+    setDirection(dir);
+    
+    // Immediate action
+    const canMove = handleChange(dir);
+    if (!canMove) return;
+
+    // Wait for long press
+    timerRef.current = setTimeout(() => {
+        // Start rapid fire
+        intervalRef.current = setInterval(() => {
+            const moved = handleChange(dir);
+            if (!moved) stopInteraction();
+        }, 100);
+    }, 400); // 400ms delay for long press
+  };
+
+  const stopInteraction = () => {
+    setDirection(0);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    timerRef.current = null;
+    intervalRef.current = null;
+  };
+
+  const ITEM_HEIGHT = 64; 
   const VISIBLE_ITEMS = 3;
   const CONTAINER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS; // 192px
 
-  // Sync scroll position when value changes externally (e.g. Presets)
-  useEffect(() => {
-    if (scrollRef.current) {
-      const targetTop = value * ITEM_HEIGHT;
-      const currentTop = scrollRef.current.scrollTop;
-      
-      // Only force scroll if we're not already there (approx)
-      if (Math.abs(currentTop - targetTop) > 1) {
-        isProgrammaticScroll.current = true;
-        
-        // IMPORTANT: Temporarily disable snap to prevent it from fighting the smooth scroll
-        scrollRef.current.style.scrollSnapType = 'none';
-        
-        scrollRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
-        
-        // Clear existing timeout
-        if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-        
-        // Re-enable snap after animation finishes
-        scrollTimeout.current = setTimeout(() => {
-          isProgrammaticScroll.current = false;
-          if (scrollRef.current) {
-            scrollRef.current.style.scrollSnapType = 'y mandatory';
-          }
-        }, 600);
-      }
-    }
-    
-    return () => {
-      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-    };
-  }, [value]);
-
-  const handleScroll = () => {
-    if (isProgrammaticScroll.current) return;
-
-    if (scrollRef.current) {
-      const scrollTop = scrollRef.current.scrollTop;
-      const index = Math.round(scrollTop / ITEM_HEIGHT);
-      
-      const clampedIndex = Math.max(0, Math.min(index, range - 1));
-
-      if (clampedIndex !== value) {
-        // Haptic feedback
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-           navigator.vibrate(5); // Lighter feedback
-        }
-        // Audio feedback
-        playTickSound();
-        
-        onChange(clampedIndex);
-      }
-    }
-  };
+  const prevVal = value - 1;
+  const nextVal = value + 1;
 
   return (
     <div 
-      className="relative flex flex-col items-center select-none" 
-      style={{ height: `${CONTAINER_HEIGHT}px`, width: '9rem' }} // Wider column
+      className="relative flex flex-col items-center select-none touch-none" 
+      style={{ height: `${CONTAINER_HEIGHT}px`, width: '9rem' }} 
     >
-      {/* Label */}
-      <div className="absolute -top-5 text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</div>
+      {/* Label - Increased gap significantly (-top-10) */}
+      <div className="absolute -top-10 text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</div>
       
       {/* Selection Highlight */}
       <div 
@@ -90,40 +86,49 @@ const WheelColumn: React.FC<{
         style={{ top: `${ITEM_HEIGHT}px`, height: `${ITEM_HEIGHT}px` }} 
       />
 
-      {/* Scroll Container */}
-      <div 
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="w-full h-full overflow-y-scroll overflow-x-hidden snap-y snap-mandatory z-10 no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] touch-pan-y"
-      >
-        {/* Top Spacer: Pushes Item 0 to the middle slot */}
-        <div className="w-full flex-shrink-0" style={{ height: `${ITEM_HEIGHT}px` }} />
-        
-        {Array.from({ length: range }).map((_, i) => (
+      <div className="flex flex-col w-full h-full z-10">
+          {/* Top Button (Decrement) */}
           <div 
-            key={i} 
-            onClick={() => onChange(i)}
-            style={{ 
-              height: `${ITEM_HEIGHT}px`,
-              scrollSnapStop: 'always' // Forces stop at each item, killing inertia
-            }}
-            className={`w-full flex flex-shrink-0 items-center justify-center snap-center cursor-pointer transition-all duration-200 tabular-nums leading-none ${
-              i === value 
-                ? 'text-4xl font-bold text-white' 
-                : 'text-xl text-slate-600'
-            }`}
+            onPointerDown={(e) => { e.preventDefault(); startInteraction(-1); }}
+            onPointerUp={(e) => { e.preventDefault(); stopInteraction(); }}
+            onPointerLeave={(e) => { e.preventDefault(); stopInteraction(); }}
+            onPointerCancel={(e) => { e.preventDefault(); stopInteraction(); }}
+            style={{ height: `${ITEM_HEIGHT}px` }}
+            className={`w-full flex items-center justify-center cursor-pointer active:scale-95 transition-transform duration-100 ${direction === -1 ? 'text-white' : 'text-slate-500'}`}
           >
-            <span className="translate-y-[2px]">{i.toString().padStart(2, '0')}</span>
+             <span className="text-2xl tabular-nums leading-none">
+                {prevVal >= 0 ? prevVal.toString().padStart(2, '0') : ''}
+            </span>
           </div>
-        ))}
 
-        {/* Bottom Spacer */}
-        <div className="w-full flex-shrink-0" style={{ height: `${ITEM_HEIGHT}px` }} />
+          {/* Middle Display (Current) */}
+          <div 
+             style={{ height: `${ITEM_HEIGHT}px` }}
+             className="w-full flex items-center justify-center font-bold text-white"
+          >
+            <span className="text-4xl tabular-nums leading-none translate-y-[2px]">
+                {value.toString().padStart(2, '0')}
+            </span>
+          </div>
+
+          {/* Bottom Button (Increment) */}
+          <div 
+            onPointerDown={(e) => { e.preventDefault(); startInteraction(1); }}
+            onPointerUp={(e) => { e.preventDefault(); stopInteraction(); }}
+            onPointerLeave={(e) => { e.preventDefault(); stopInteraction(); }}
+            onPointerCancel={(e) => { e.preventDefault(); stopInteraction(); }}
+            style={{ height: `${ITEM_HEIGHT}px` }}
+            className={`w-full flex items-center justify-center cursor-pointer active:scale-95 transition-transform duration-100 ${direction === 1 ? 'text-white' : 'text-slate-500'}`}
+          >
+             <span className="text-2xl tabular-nums leading-none">
+                {nextVal < range ? nextVal.toString().padStart(2, '0') : ''}
+            </span>
+          </div>
       </div>
       
-      {/* Gradients */}
-      <div className="absolute top-0 w-full bg-gradient-to-b from-dark via-dark/90 to-transparent pointer-events-none z-20" style={{ height: `${ITEM_HEIGHT}px` }} />
-      <div className="absolute bottom-0 w-full bg-gradient-to-t from-dark via-dark/90 to-transparent pointer-events-none z-20" style={{ height: `${ITEM_HEIGHT}px` }} />
+      {/* Gradients - lighter opacity now that interaction is click-based */}
+      <div className="absolute top-0 w-full bg-gradient-to-b from-dark via-dark/60 to-transparent pointer-events-none z-20" style={{ height: `${ITEM_HEIGHT}px` }} />
+      <div className="absolute bottom-0 w-full bg-gradient-to-t from-dark via-dark/60 to-transparent pointer-events-none z-20" style={{ height: `${ITEM_HEIGHT}px` }} />
     </div>
   );
 };
@@ -238,8 +243,8 @@ const App: React.FC = () => {
            {/* Main: Increased spacing from space-y-3 to space-y-8 to match footer gaps */}
            <main className="flex-1 flex flex-col items-center justify-center space-y-8 w-full max-w-lg mx-auto px-6">
               
-              {/* Wheel Picker: Increased vertical padding (pt-10 pb-6) to fix label overlap */}
-              <div className="flex justify-center items-center space-x-2 bg-surface/50 px-4 pt-10 pb-6 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-[22rem]">
+              {/* Wheel Picker: Increased vertical padding (pt-14 pb-6) to accommodate larger label offset */}
+              <div className="flex justify-center items-center space-x-2 bg-surface/50 px-4 pt-14 pb-6 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-[22rem]">
                  <WheelColumn 
                     range={61} 
                     value={settings.intervalMinutes} 
