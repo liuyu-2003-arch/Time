@@ -14,7 +14,12 @@ const WheelColumn: React.FC<{
 }> = ({ range, value, onChange, label }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isProgrammaticScroll = useRef(false);
-  const ITEM_HEIGHT = 48; // h-12
+  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Constants for pixel-perfect alignment
+  const ITEM_HEIGHT = 48; // h-12 = 48px
+  const VISIBLE_ITEMS = 3;
+  const CONTAINER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS; // 144px
 
   // Sync scroll position when value changes externally (e.g. Presets)
   useEffect(() => {
@@ -22,18 +27,31 @@ const WheelColumn: React.FC<{
       const targetTop = value * ITEM_HEIGHT;
       const currentTop = scrollRef.current.scrollTop;
       
-      // Only force scroll if the difference is significant
-      if (Math.abs(currentTop - targetTop) > 2) {
+      // Only force scroll if we're not already there (approx)
+      if (Math.abs(currentTop - targetTop) > 1) {
         isProgrammaticScroll.current = true;
+        
+        // IMPORTANT: Temporarily disable snap to prevent it from fighting the smooth scroll
+        scrollRef.current.style.scrollSnapType = 'none';
+        
         scrollRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
         
-        // Reset flag after animation duration
-        const timeout = setTimeout(() => {
+        // Clear existing timeout
+        if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+        
+        // Re-enable snap after animation finishes (approx 500ms)
+        scrollTimeout.current = setTimeout(() => {
           isProgrammaticScroll.current = false;
-        }, 500);
-        return () => clearTimeout(timeout);
+          if (scrollRef.current) {
+            scrollRef.current.style.scrollSnapType = 'y mandatory';
+          }
+        }, 550);
       }
     }
+    
+    return () => {
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    };
   }, [value]);
 
   const handleScroll = () => {
@@ -43,13 +61,12 @@ const WheelColumn: React.FC<{
       const scrollTop = scrollRef.current.scrollTop;
       const index = Math.round(scrollTop / ITEM_HEIGHT);
       
-      // Clamp index within bounds
       const clampedIndex = Math.max(0, Math.min(index, range - 1));
 
       if (clampedIndex !== value) {
         // Haptic feedback
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
-           navigator.vibrate(15);
+           navigator.vibrate(10);
         }
         onChange(clampedIndex);
       }
@@ -57,49 +74,53 @@ const WheelColumn: React.FC<{
   };
 
   return (
-    <div className="relative h-36 w-24 flex flex-col items-center select-none">
+    <div 
+      className="relative flex flex-col items-center select-none" 
+      style={{ height: `${CONTAINER_HEIGHT}px`, width: '6rem' }} // w-24
+    >
       {/* Label */}
       <div className="absolute -top-6 text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</div>
       
-      {/* Selection Highlight (Centered visually at 48px from top of container) */}
-      <div className="absolute top-[48px] w-full h-12 border-t border-b border-slate-600 bg-slate-800/30 pointer-events-none z-0 rounded-lg" />
+      {/* Selection Highlight */}
+      {/* Positioned exactly at the middle slot: 48px from top */}
+      <div className="absolute top-[48px] w-full h-[48px] border-t border-b border-slate-600 bg-slate-800/30 pointer-events-none z-0 rounded-lg" />
 
       {/* Scroll Container */}
-      {/* Using explicit spacers instead of padding ensures reliable snap alignment for 00 and end items */}
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
         className="w-full h-full overflow-y-scroll overflow-x-hidden snap-y snap-mandatory z-10 no-scrollbar [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
       >
-        {/* Top Spacer: Pushes the first item (00) to the center */}
-        <div className="h-[48px] w-full flex-shrink-0" />
+        {/* Top Spacer: Pushes Item 0 to the middle slot when scrollTop is 0 */}
+        <div className="w-full flex-shrink-0" style={{ height: `${ITEM_HEIGHT}px` }} />
         
         {Array.from({ length: range }).map((_, i) => (
           <div 
             key={i} 
             onClick={() => {
-              onChange(i);
-              if (scrollRef.current) {
-                 isProgrammaticScroll.current = true;
-                 scrollRef.current.scrollTo({ top: i * ITEM_HEIGHT, behavior: 'smooth' });
-                 setTimeout(() => isProgrammaticScroll.current = false, 500);
-              }
+              // Click to snap
+              onChange(i); 
+              // The useEffect will handle the scrolling
             }}
-            className={`h-12 flex flex-shrink-0 items-center justify-center snap-center cursor-pointer transition-all duration-200 ${
-              i === value ? 'text-2xl font-bold text-white scale-110' : 'text-lg text-slate-600'
+            style={{ height: `${ITEM_HEIGHT}px` }}
+            className={`w-full flex flex-shrink-0 items-center justify-center snap-center cursor-pointer transition-all duration-200 tabular-nums leading-none ${
+              i === value 
+                ? 'text-3xl font-bold text-white' 
+                : 'text-lg text-slate-600'
             }`}
           >
-            {i.toString().padStart(2, '0')}
+            {/* Added small vertical offset to visually center numbers which often sit high */}
+            <span className="translate-y-[1px]">{i.toString().padStart(2, '0')}</span>
           </div>
         ))}
 
-        {/* Bottom Spacer: Allows the last item to be scrolled to center */}
-        <div className="h-[48px] w-full flex-shrink-0" />
+        {/* Bottom Spacer: Allows last item to reach the middle slot */}
+        <div className="w-full flex-shrink-0" style={{ height: `${ITEM_HEIGHT}px` }} />
       </div>
       
-      {/* Gradients for depth */}
-      <div className="absolute top-0 w-full h-12 bg-gradient-to-b from-dark via-dark/80 to-transparent pointer-events-none z-20" />
-      <div className="absolute bottom-0 w-full h-12 bg-gradient-to-t from-dark via-dark/80 to-transparent pointer-events-none z-20" />
+      {/* Gradients */}
+      <div className="absolute top-0 w-full h-12 bg-gradient-to-b from-dark via-dark/90 to-transparent pointer-events-none z-20" />
+      <div className="absolute bottom-0 w-full h-12 bg-gradient-to-t from-dark via-dark/90 to-transparent pointer-events-none z-20" />
     </div>
   );
 };
@@ -107,7 +128,6 @@ const WheelColumn: React.FC<{
 
 // --- Main App ---
 
-// Helper to format MM:SS
 const formatTime = (totalSeconds: number) => {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
@@ -122,34 +142,24 @@ const PRESETS = [
 ];
 
 const App: React.FC = () => {
-  // --- State ---
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [settings, setSettings] = useState<TimerSettings>({ intervalMinutes: 2, intervalSeconds: 0 });
   
-  // Timer State
   const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0);
   const [currentIntervalElapsed, setCurrentIntervalElapsed] = useState(0);
   const [cycleCount, setCycleCount] = useState(1);
-  
-  // Audio State
   const [audioLoadingState, setAudioLoadingState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
   
-  // Audio Assets Ref
   const audioAssets = useRef<AudioAssets>({
     five: null, four: null, three: null, two: null, one: null, next: null
   });
 
-  // Derived Values
   const intervalDuration = (settings.intervalMinutes * 60) + settings.intervalSeconds;
   
-  // --- Audio Logic ---
   const loadAudioInBackground = async () => {
     if (audioLoadingState === 'ready' || audioLoadingState === 'loading') return;
-    
     setAudioLoadingState('loading');
-    
     try {
-      // Parallel generation
       const [five, four, three, two, one, next] = await Promise.all([
         generateVoiceAsset("Five"),
         generateVoiceAsset("Four"),
@@ -158,7 +168,6 @@ const App: React.FC = () => {
         generateVoiceAsset("One"),
         generateVoiceAsset("Next action! Go!"),
       ]);
-
       audioAssets.current = { five, four, three, two, one, next };
       setAudioLoadingState('ready');
     } catch (err) {
@@ -168,37 +177,22 @@ const App: React.FC = () => {
   };
 
   const startSession = async () => {
-    // 1. User gesture context resume (Important for iOS)
     const ctx = getAudioContext();
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
-    }
-
-    // 2. IMMEDIATE START: Switch state first
+    if (ctx.state === 'suspended') await ctx.resume();
     setAppState(AppState.RUNNING);
-
-    // 3. Trigger audio load in background (fire and forget)
-    // The timer loop handles null buffers gracefully using beeps
     loadAudioInBackground();
   };
 
-  // --- Timer Logic ---
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
-
     if (appState === AppState.RUNNING) {
       intervalId = setInterval(() => {
         setTotalSecondsElapsed(prev => {
           const newTotal = prev + 1;
-          
-          // Calculate interval position logic
           const timeInCurrentCycle = newTotal % intervalDuration;
           const effectiveTime = timeInCurrentCycle === 0 ? intervalDuration : timeInCurrentCycle;
-
-          // Check Triggers based on "Time Remaining" in this interval
           const timeRemaining = intervalDuration - effectiveTime;
 
-          // Triggers
           if (timeRemaining === 5) playSound(audioAssets.current.five);
           if (timeRemaining === 4) playSound(audioAssets.current.four);
           if (timeRemaining === 3) playSound(audioAssets.current.three);
@@ -208,29 +202,20 @@ const App: React.FC = () => {
              playGoSound(audioAssets.current.next);
              setCycleCount(c => c + 1);
           }
-
           setCurrentIntervalElapsed(effectiveTime === intervalDuration ? 0 : effectiveTime);
-          
           return newTotal;
         });
       }, 1000);
     }
-
     return () => clearInterval(intervalId);
   }, [appState, intervalDuration]);
 
-
-  // --- Handlers ---
   const toggleTimer = () => {
-    if (appState === AppState.RUNNING) {
-      setAppState(AppState.PAUSED);
-    } else {
-      setAppState(AppState.RUNNING);
-    }
+    setAppState(prev => prev === AppState.RUNNING ? AppState.PAUSED : AppState.RUNNING);
   };
 
   const resetTimer = () => {
-    setAppState(AppState.IDLE); // Go back to Setup
+    setAppState(AppState.IDLE);
     setTotalSecondsElapsed(0);
     setCurrentIntervalElapsed(0);
     setCycleCount(1);
@@ -238,7 +223,6 @@ const App: React.FC = () => {
 
   // --- Views ---
 
-  // 1. Setup View (IDLE)
   if (appState === AppState.IDLE) {
      return (
         <div className="min-h-screen bg-dark flex flex-col relative text-white">
@@ -248,8 +232,6 @@ const App: React.FC = () => {
            </header>
 
            <main className="flex-1 flex flex-col items-center justify-center space-y-4 w-full max-w-md mx-auto px-6">
-              
-              {/* Wheel Picker */}
               <div className="flex justify-center items-center space-x-4 bg-surface/50 p-6 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-[18rem]">
                  <WheelColumn 
                     range={61} 
@@ -266,7 +248,6 @@ const App: React.FC = () => {
                  />
               </div>
 
-              {/* Presets */}
               <div className="w-full flex flex-col items-center">
                  <div className="text-xs font-bold text-slate-600 uppercase tracking-widest text-center mb-4">Quick Presets</div>
                  <div className="grid grid-cols-2 gap-3 w-[18rem]">
@@ -307,14 +288,11 @@ const App: React.FC = () => {
      )
   }
 
-  // 2. Running/Paused View
   const timeLeftInInterval = intervalDuration - currentIntervalElapsed;
   const percentage = (timeLeftInInterval / intervalDuration) * 100;
 
   return (
     <div className="min-h-screen bg-dark flex flex-col text-white overflow-hidden relative">
-      
-      {/* Header */}
       <header className="p-6 flex justify-between items-center z-10">
         <h1 className="text-xl font-bold text-slate-200">IntervalFlow</h1>
         <div className="flex items-center space-x-2">
@@ -333,16 +311,11 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col items-center justify-center space-y-8 relative px-6">
-        
-        {/* Cycle Info */}
         <div className="text-center space-y-1">
           <p className="text-slate-400 text-sm tracking-widest uppercase">Current Cycle</p>
           <p className="text-3xl font-bold text-white">#{cycleCount}</p>
         </div>
-
-        {/* Big Timer */}
         <div className="relative">
           <CircularProgress 
             size={300} 
@@ -353,8 +326,6 @@ const App: React.FC = () => {
             color={timeLeftInInterval <= 5 ? '#FF0055' : '#00D8FF'}
           />
         </div>
-
-        {/* Status Text */}
         <div className="h-8">
            {timeLeftInInterval <= 5 && timeLeftInInterval > 0 && (
              <span className="text-secondary font-bold text-2xl animate-pulse">Get Ready!</span>
@@ -365,7 +336,6 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Footer Controls */}
       <footer className="p-8 pb-12 bg-surface/50 backdrop-blur-md rounded-t-3xl border-t border-slate-700/50 flex items-center justify-center space-x-8 shadow-2xl">
         <button 
           onClick={resetTimer}
