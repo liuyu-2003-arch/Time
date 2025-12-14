@@ -13,16 +13,27 @@ const WheelColumn: React.FC<{
   label: string;
 }> = ({ range, value, onChange, label }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isProgrammaticScroll = useRef(false);
   const ITEM_HEIGHT = 48; // h-12
 
-  // Sync scroll position when value changes externally
+  // Sync scroll position when value changes externally (e.g. Presets)
   useEffect(() => {
     if (scrollRef.current) {
+      // Set flag to ignore the scroll event triggered by this assignment
+      isProgrammaticScroll.current = true;
       scrollRef.current.scrollTop = value * ITEM_HEIGHT;
+      
+      // Reset flag after a short delay to allow scroll event to fire/settle
+      setTimeout(() => {
+        isProgrammaticScroll.current = false;
+      }, 100);
     }
   }, [value]);
 
   const handleScroll = () => {
+    // Ignore scroll events caused by clicking a preset
+    if (isProgrammaticScroll.current) return;
+
     if (scrollRef.current) {
       const scrollTop = scrollRef.current.scrollTop;
       const index = Math.round(scrollTop / ITEM_HEIGHT);
@@ -45,12 +56,19 @@ const WheelColumn: React.FC<{
         ref={scrollRef}
         onScroll={handleScroll}
         className="w-full h-full overflow-y-scroll snap-y snap-mandatory no-scrollbar z-10 py-[calc(50%-24px)]"
-        style={{ scrollBehavior: 'smooth' }}
+        // Removed scrollBehavior: 'smooth' to fix preset conflict. 
+        // Native touch scrolling remains smooth.
       >
         {Array.from({ length: range }).map((_, i) => (
           <div 
             key={i} 
-            onClick={() => onChange(i)}
+            // Allow clicking a number to snap to it
+            onClick={() => {
+              onChange(i);
+              if (scrollRef.current) {
+                 scrollRef.current.scrollTo({ top: i * ITEM_HEIGHT, behavior: 'smooth' });
+              }
+            }}
             className={`h-12 flex items-center justify-center snap-center cursor-pointer transition-all duration-200 ${
               i === value ? 'text-2xl font-bold text-white scale-110' : 'text-lg text-slate-600'
             }`}
@@ -97,8 +115,9 @@ const App: React.FC = () => {
   const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0);
   const [currentIntervalElapsed, setCurrentIntervalElapsed] = useState(0);
   const [cycleCount, setCycleCount] = useState(1);
-  const [audioLoaded, setAudioLoaded] = useState(false);
-  const [usingFallbackAudio, setUsingFallbackAudio] = useState(false);
+  
+  // Audio State
+  const [audioLoadingState, setAudioLoadingState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
   
   // Audio Assets Ref
   const audioAssets = useRef<AudioAssets>({
@@ -108,22 +127,11 @@ const App: React.FC = () => {
   // Derived Values
   const intervalDuration = (settings.intervalMinutes * 60) + settings.intervalSeconds;
   
-  // --- Audio Initialization ---
-  const startSession = async () => {
-    // 1. User gesture context resume
-    const ctx = getAudioContext();
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
-    }
-
-    // 2. If audio already loaded, just run
-    if (audioLoaded) {
-      setAppState(AppState.RUNNING);
-      return;
-    }
-
-    // 3. Generate Audio
-    setAppState(AppState.GENERATING_AUDIO);
+  // --- Audio Logic ---
+  const loadAudioInBackground = async () => {
+    if (audioLoadingState === 'ready' || audioLoadingState === 'loading') return;
+    
+    setAudioLoadingState('loading');
     
     try {
       // Parallel generation
@@ -137,16 +145,26 @@ const App: React.FC = () => {
       ]);
 
       audioAssets.current = { five, four, three, two, one, next };
-      setAudioLoaded(true);
-      setUsingFallbackAudio(false);
+      setAudioLoadingState('ready');
     } catch (err) {
       console.warn("Audio generation failed, switching to fallback beeps.", err);
-      // Don't block the user, just mark as loaded (using fallback)
-      setAudioLoaded(true);
-      setUsingFallbackAudio(true);
+      setAudioLoadingState('failed');
+    }
+  };
+
+  const startSession = async () => {
+    // 1. User gesture context resume (Important for iOS)
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
     }
 
+    // 2. IMMEDIATE START: Switch state first
     setAppState(AppState.RUNNING);
+
+    // 3. Trigger audio load in background (fire and forget)
+    // The timer loop handles null buffers gracefully using beeps
+    loadAudioInBackground();
   };
 
   // --- Timer Logic ---
@@ -205,18 +223,7 @@ const App: React.FC = () => {
 
   // --- Views ---
 
-  // 1. Loading View
-  if (appState === AppState.GENERATING_AUDIO) {
-    return (
-      <div className="min-h-screen bg-dark flex flex-col items-center justify-center p-6 text-center space-y-6">
-        <Loader2 className="animate-spin text-primary" size={48} />
-        <p className="text-white text-lg font-medium animate-pulse">Preparing your coach...</p>
-        <p className="text-slate-500 text-sm">Generating AI voice assets</p>
-      </div>
-    );
-  }
-
-  // 2. Setup View (IDLE)
+  // 1. Setup View (IDLE)
   if (appState === AppState.IDLE) {
      return (
         <div className="min-h-screen bg-dark flex flex-col relative text-white">
@@ -273,7 +280,7 @@ const App: React.FC = () => {
                  <Play fill="currentColor" size={24} />
                  <span>Start Workout</span>
               </button>
-              {usingFallbackAudio && (
+              {audioLoadingState === 'failed' && (
                  <p className="text-center text-xs text-yellow-500 mt-4 flex items-center justify-center gap-1">
                     <AlertCircle size={12}/> Using beep sounds (AI Voice unavailable)
                  </p>
@@ -283,7 +290,7 @@ const App: React.FC = () => {
      )
   }
 
-  // 3. Running/Paused View
+  // 2. Running/Paused View
   const timeLeftInInterval = intervalDuration - currentIntervalElapsed;
   const percentage = (timeLeftInInterval / intervalDuration) * 100;
 
@@ -294,10 +301,17 @@ const App: React.FC = () => {
       <header className="p-6 flex justify-between items-center z-10">
         <h1 className="text-xl font-bold text-slate-200">IntervalFlow</h1>
         <div className="flex items-center space-x-2">
-           {usingFallbackAudio ? (
+           {audioLoadingState === 'loading' && (
+             <div className="flex items-center space-x-2 px-2 py-1 bg-surface rounded-full border border-slate-700">
+               <Loader2 className="animate-spin text-primary" size={14} />
+               <span className="text-xs text-slate-400">Loading AI Voice...</span>
+             </div>
+           )}
+           {audioLoadingState === 'failed' && (
               <span className="text-xs text-yellow-500 font-medium px-2 py-1 bg-yellow-500/10 rounded-full border border-yellow-500/20">Beeps Mode</span>
-           ) : (
-              <span className="text-xs text-primary font-medium px-2 py-1 bg-primary/10 rounded-full border border-primary/20">AI Voice Active</span>
+           )}
+           {audioLoadingState === 'ready' && (
+              <span className="text-xs text-primary font-medium px-2 py-1 bg-primary/10 rounded-full border border-primary/20">Voice Active</span>
            )}
         </div>
       </header>
