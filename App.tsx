@@ -74,30 +74,31 @@ const WheelColumn: React.FC<{
     intervalRef.current = null;
   };
 
-  const ITEM_HEIGHT = 64; 
+  // UPDATED: Reduced height for compact layout
+  const ITEM_HEIGHT = 52;
   const VISIBLE_ITEMS = 3;
-  const CONTAINER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS; // 192px
+  const CONTAINER_HEIGHT = ITEM_HEIGHT * VISIBLE_ITEMS;
 
   const prevVal = value - 1;
   const nextVal = value + 1;
 
   return (
-    <div 
-      className="relative flex flex-col items-center select-none touch-none" 
-      style={{ height: `${CONTAINER_HEIGHT}px`, width: '8rem' }} 
+    <div
+      className="relative flex flex-col items-center select-none touch-none"
+      style={{ height: `${CONTAINER_HEIGHT}px`, width: '6rem' }}
     >
       {/* Label - Adjusted position */}
-      <div className="absolute -top-8 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</div>
-      
+      <div className="absolute -top-6 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</div>
+
       {/* Selection Highlight */}
-      <div 
+      <div
         className="absolute w-full border-t border-b border-slate-600 bg-slate-800/30 pointer-events-none z-0 rounded-lg"
-        style={{ top: `${ITEM_HEIGHT}px`, height: `${ITEM_HEIGHT}px` }} 
+        style={{ top: `${ITEM_HEIGHT}px`, height: `${ITEM_HEIGHT}px` }}
       />
 
       <div className="flex flex-col w-full h-full z-10">
           {/* Top Button (Decrement) */}
-          <div 
+          <div
             onPointerDown={(e) => { e.preventDefault(); startInteraction(-1); }}
             onPointerUp={(e) => { e.preventDefault(); stopInteraction(); }}
             onPointerLeave={(e) => { e.preventDefault(); stopInteraction(); }}
@@ -111,7 +112,7 @@ const WheelColumn: React.FC<{
           </div>
 
           {/* Middle Display (Current) */}
-          <div 
+          <div
              style={{ height: `${ITEM_HEIGHT}px` }}
              className="w-full flex items-center justify-center font-bold text-white"
           >
@@ -121,7 +122,7 @@ const WheelColumn: React.FC<{
           </div>
 
           {/* Bottom Button (Increment) */}
-          <div 
+          <div
             onPointerDown={(e) => { e.preventDefault(); startInteraction(1); }}
             onPointerUp={(e) => { e.preventDefault(); stopInteraction(); }}
             onPointerLeave={(e) => { e.preventDefault(); stopInteraction(); }}
@@ -134,7 +135,7 @@ const WheelColumn: React.FC<{
             </span>
           </div>
       </div>
-      
+
       {/* Gradients */}
       <div className="absolute top-0 w-full bg-gradient-to-b from-dark via-dark/60 to-transparent pointer-events-none z-20" style={{ height: `${ITEM_HEIGHT}px` }} />
       <div className="absolute bottom-0 w-full bg-gradient-to-t from-dark via-dark/60 to-transparent pointer-events-none z-20" style={{ height: `${ITEM_HEIGHT}px` }} />
@@ -162,21 +163,21 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [settings, setSettings] = useState<TimerSettings>({ intervalMinutes: 2, intervalSeconds: 0 });
   const [isMusicEnabled, setIsMusicEnabled] = useState(true);
-  
+
   const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0);
   const [currentIntervalElapsed, setCurrentIntervalElapsed] = useState(0);
   const [cycleCount, setCycleCount] = useState(1);
   const [audioLoadingState, setAudioLoadingState] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
-  
+
   // Ref for Wake Lock Sentinel
   const wakeLockRef = useRef<any>(null);
-  
+
   const audioAssets = useRef<AudioAssets>({
     five: null, four: null, three: null, two: null, one: null, next: null
   });
 
   const intervalDuration = (settings.intervalMinutes * 60) + settings.intervalSeconds;
-  
+
   const loadAudioInBackground = async () => {
     if (audioLoadingState === 'ready' || audioLoadingState === 'loading') return;
     setAudioLoadingState('loading');
@@ -303,48 +304,49 @@ const App: React.FC = () => {
 
   if (appState === AppState.IDLE) {
      return (
-        <div className="h-[100dvh] w-full bg-dark flex flex-col relative text-white overflow-hidden">
-           {/* Header: reduced vertical padding */}
-           <header className="px-6 pt-6 pb-2 text-center flex flex-col items-center flex-shrink-0">
-              <div className="flex items-center gap-2 mb-2 opacity-80">
+        <div className="h-full w-full bg-dark flex flex-col relative text-white overflow-hidden">
+           {/* Header: Compact padding */}
+           <header className="px-6 pt-8 pb-2 text-center flex flex-col items-center flex-shrink-0">
+              <div className="flex items-center gap-2 mb-1 opacity-80">
                   <Logo className="w-5 h-5" />
                   <span className="font-bold text-slate-300 tracking-wide uppercase text-[10px]">IntervalFlow</span>
               </div>
-              <h1 className="text-xl font-bold text-slate-200 tracking-tight">Set Interval</h1>
+              <h1 className="text-lg font-bold text-slate-200 tracking-tight">Set Interval</h1>
            </header>
 
-           {/* Main: Use flex-col and justify-evenly to distribute space dynamically, reduced max width */}
-           <main className="flex-1 flex flex-col items-center justify-center gap-4 w-full max-w-sm mx-auto px-6">
-              
-              {/* Wheel Picker: Reduced internal padding */}
-              <div className="flex justify-center items-center space-x-2 bg-surface/50 px-2 pt-10 pb-4 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-sm w-full">
-                 <WheelColumn 
-                    range={61} 
-                    value={settings.intervalMinutes} 
-                    onChange={(val) => setSettings(s => ({...s, intervalMinutes: val}))} 
+           {/* Main: Use justify-evenly instead of center/gap to spread items nicely in available space */}
+           <main className="flex-1 flex flex-col items-center justify-evenly w-full max-w-sm mx-auto px-6 py-2">
+
+              {/* Wheel Picker: Reduced internal padding (py-10 -> py-6) */}
+              <div className="flex justify-center items-center space-x-4 bg-surface/30 px-4 py-6 rounded-3xl border border-slate-800/50 shadow-xl backdrop-blur-sm w-full">
+                 <WheelColumn
+                    range={61}
+                    value={settings.intervalMinutes}
+                    onChange={(val) => setSettings(s => ({...s, intervalMinutes: val}))}
                     label="MIN"
                  />
-                 <div className="h-10 text-2xl font-bold text-slate-600 pb-2">:</div>
-                 <WheelColumn 
-                    range={60} 
-                    value={settings.intervalSeconds} 
-                    onChange={(val) => setSettings(s => ({...s, intervalSeconds: val}))} 
+                 <div className="h-8 text-2xl font-bold text-slate-600 flex items-center pb-2">:</div>
+                 <WheelColumn
+                    range={60}
+                    value={settings.intervalSeconds}
+                    onChange={(val) => setSettings(s => ({...s, intervalSeconds: val}))}
                     label="SEC"
                  />
               </div>
 
               {/* Presets: Compact spacing */}
-              <div className="w-full flex flex-col items-center gap-2">
+              <div className="w-full flex flex-col items-center gap-3">
                  <div className="text-[10px] font-bold text-slate-600 uppercase tracking-widest text-center">Quick Presets</div>
-                 <div className="grid grid-cols-2 gap-2 w-full">
+                 <div className="grid grid-cols-2 gap-3 w-full">
                     {PRESETS.map(p => (
                        <button
                           key={p.label}
                           onClick={() => setSettings({ intervalMinutes: p.m, intervalSeconds: p.s })}
-                          className={`py-3 rounded-lg text-sm font-medium transition-all active:scale-95 ${
+                          // Reduced vertical padding (py-3 -> py-2.5)
+                          className={`py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95 ${
                              settings.intervalMinutes === p.m && settings.intervalSeconds === p.s
                              ? 'bg-slate-700 text-white shadow-lg'
-                             : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
+                             : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60'
                           }`}
                        >
                           {p.label}
@@ -354,18 +356,19 @@ const App: React.FC = () => {
               </div>
            </main>
 
-           {/* Footer: reduced padding */}
-           <footer className="p-6 pb-8 w-full flex flex-col items-center flex-shrink-0">
+           {/* Footer: Compact padding */}
+           <footer className="p-6 pb-10 w-full flex flex-col items-center flex-shrink-0">
               <div className="w-full max-w-sm flex flex-col items-center">
-                 <button 
+                 <button
                     onClick={startSession}
-                    className="w-64 py-4 bg-primary hover:bg-cyan-400 text-dark font-bold text-xl rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center space-x-2 transition-transform active:scale-95"
+                    // Reduced height slightly (py-4 -> py-3.5)
+                    className="w-full py-3.5 bg-primary hover:bg-cyan-400 text-dark font-bold text-lg rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center space-x-2 transition-transform active:scale-95"
                  >
-                    <Play fill="currentColor" size={24} />
+                    <Play fill="currentColor" size={20} />
                     <span>Start Workout</span>
                  </button>
                  {audioLoadingState === 'failed' && (
-                    <p className="text-center text-[10px] text-yellow-500 mt-2 flex items-center justify-center gap-1">
+                    <p className="text-center text-[10px] text-yellow-500 mt-3 flex items-center justify-center gap-1 opacity-80">
                        <AlertCircle size={10}/> Audio fallback active
                     </p>
                  )}
@@ -379,7 +382,7 @@ const App: React.FC = () => {
   const percentage = (timeLeftInInterval / intervalDuration) * 100;
 
   return (
-    <div className="h-[100dvh] w-full bg-dark flex flex-col text-white overflow-hidden relative">
+    <div className="h-full w-full bg-dark flex flex-col text-white overflow-hidden relative">
       <header className="p-6 flex justify-between items-center z-10 flex-shrink-0">
         <div className="flex items-center gap-3">
             <Logo className="w-8 h-8" />
