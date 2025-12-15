@@ -171,12 +171,45 @@ const App: React.FC = () => {
 
   // Ref for Wake Lock Sentinel
   const wakeLockRef = useRef<any>(null);
+  const workerRef = useRef<Worker | null>(null);
 
   const audioAssets = useRef<AudioAssets>({
     five: null, four: null, three: null, two: null, one: null, next: null
   });
 
   const intervalDuration = (settings.intervalMinutes * 60) + settings.intervalSeconds;
+
+  // Initialize and manage the timer worker
+  useEffect(() => {
+    const worker = new Worker(new URL('./services/timerWorker.ts', import.meta.url), { type: 'module' });
+    workerRef.current = worker;
+
+    worker.onmessage = (e: MessageEvent) => {
+      const { type, totalSecondsElapsed: newTotal } = e.data;
+      if (type === 'tick') {
+        setTotalSecondsElapsed(newTotal);
+
+        const timeInCurrentCycle = newTotal % intervalDuration;
+        const effectiveTime = timeInCurrentCycle === 0 ? intervalDuration : timeInCurrentCycle;
+        const timeRemaining = intervalDuration - effectiveTime;
+
+        if (timeRemaining === 5) playSound(audioAssets.current.five);
+        if (timeRemaining === 4) playSound(audioAssets.current.four);
+        if (timeRemaining === 3) playSound(audioAssets.current.three);
+        if (timeRemaining === 2) playSound(audioAssets.current.two);
+        if (timeRemaining === 1) playSound(audioAssets.current.one);
+        if (timeRemaining === 0) {
+           playGoSound(audioAssets.current.next);
+           setCycleCount(c => c + 1);
+        }
+        setCurrentIntervalElapsed(effectiveTime === intervalDuration ? 0 : effectiveTime);
+      }
+    };
+
+    return () => {
+      worker.terminate();
+    };
+  }, [intervalDuration]); // Re-create worker if intervalDuration changes
 
   const loadAudioInBackground = async () => {
     if (audioLoadingState === 'ready' || audioLoadingState === 'loading') return;
@@ -202,6 +235,7 @@ const App: React.FC = () => {
     const ctx = getAudioContext();
     if (ctx.state === 'suspended') await ctx.resume();
     setAppState(AppState.RUNNING);
+    workerRef.current?.postMessage({ command: 'start', value: intervalDuration });
     loadAudioInBackground();
   };
 
@@ -257,35 +291,14 @@ const App: React.FC = () => {
     };
   }, [appState]);
 
-  useEffect(() => {
-    let intervalId: ReturnType<typeof setInterval> | undefined;
-    if (appState === AppState.RUNNING) {
-      intervalId = setInterval(() => {
-        setTotalSecondsElapsed(prev => {
-          const newTotal = prev + 1;
-          const timeInCurrentCycle = newTotal % intervalDuration;
-          const effectiveTime = timeInCurrentCycle === 0 ? intervalDuration : timeInCurrentCycle;
-          const timeRemaining = intervalDuration - effectiveTime;
-
-          if (timeRemaining === 5) playSound(audioAssets.current.five);
-          if (timeRemaining === 4) playSound(audioAssets.current.four);
-          if (timeRemaining === 3) playSound(audioAssets.current.three);
-          if (timeRemaining === 2) playSound(audioAssets.current.two);
-          if (timeRemaining === 1) playSound(audioAssets.current.one);
-          if (timeRemaining === 0) {
-             playGoSound(audioAssets.current.next);
-             setCycleCount(c => c + 1);
-          }
-          setCurrentIntervalElapsed(effectiveTime === intervalDuration ? 0 : effectiveTime);
-          return newTotal;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(intervalId);
-  }, [appState, intervalDuration]);
-
   const toggleTimer = () => {
-    setAppState(prev => prev === AppState.RUNNING ? AppState.PAUSED : AppState.RUNNING);
+    if (appState === AppState.RUNNING) {
+      setAppState(AppState.PAUSED);
+      workerRef.current?.postMessage({ command: 'pause' });
+    } else {
+      setAppState(AppState.RUNNING);
+      workerRef.current?.postMessage({ command: 'start', value: intervalDuration });
+    }
   };
 
   const toggleMusic = () => {
@@ -294,6 +307,7 @@ const App: React.FC = () => {
 
   const resetTimer = () => {
     setAppState(AppState.IDLE);
+    workerRef.current?.postMessage({ command: 'reset' });
     setTotalSecondsElapsed(0);
     setCurrentIntervalElapsed(0);
     setCycleCount(1);
